@@ -1,8 +1,22 @@
 <script lang="ts">
- import { Button } from "$lib/components/ui/button/index.js";
-</script>
- 
-<Button>Click me</Button>
+  import { onMount } from 'svelte';
+  import { supabase } from '$lib/supabase';
 
-<h1 class="bg-amber-300">Welcome to SvelteKit</h1>
-<p>Visit <a href="https://svelte.dev/docs/kit">svelte.dev/docs/kit</a> to read the documentation</p>
+  let message = 'Loading...';
+
+  onMount(async () => {
+    const { data, error } = await supabase
+      .from('test_messages')
+      .select('message')
+      .single();
+
+    if (error) {
+      message = 'Error: ' + error.message;
+    } else {
+      message = data.message;
+    }
+  });
+</script>
+
+<h1>Supabase Connection Test</h1>
+<p>{message}</p>
