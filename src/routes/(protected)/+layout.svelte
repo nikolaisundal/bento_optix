@@ -23,11 +23,11 @@
 			</DropdownMenu.Trigger>
 			<DropdownMenu.Content>
 				<DropdownMenu.Group>
-					<DropdownMenu.Item><a href="/patients">Patients</a></DropdownMenu.Item>
+					<DropdownMenu.Item><a href="/patients" class="w-full">Patients</a></DropdownMenu.Item>
 					<DropdownMenu.Item>Eye exam</DropdownMenu.Item>
 					<DropdownMenu.Item>Appointments</DropdownMenu.Item>
 					<DropdownMenu.Item>Order glasses</DropdownMenu.Item>
-					<DropdownMenu.Item><a href="/">home</a></DropdownMenu.Item>
+					<DropdownMenu.Item><a href="/" class="w-full">home</a></DropdownMenu.Item>
 					<DropdownMenu.Separator />
 					<DropdownMenu.Item onSelect={handleLogout} class="cursor-pointer font-bold"
 						>Log out</DropdownMenu.Item
