@@ -29,6 +29,7 @@
 		"eslint": "^9.36.0",
 		"eslint-config-prettier": "^10.1.8",
 		"eslint-plugin-svelte": "^3.12.4",
+		"formsnap": "^2.0.1",
 		"globals": "^16.4.0",
 		"prettier": "^3",
 		"prettier-plugin-svelte": "^3",
@@ -50,6 +51,8 @@
 	},
 	"dependencies": {
 		"@supabase/ssr": "^0.7.0",
-		"@supabase/supabase-js": "^2.58.0"
+		"@supabase/supabase-js": "^2.58.0",
+		"sveltekit-superforms": "^2.27.4",
+		"zod": "^4.1.12"
 	}
 }
