@@ -6,9 +6,55 @@
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { supabase } from '$lib/supabase';
 	import * as z from 'zod';
-	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { onMount } from 'svelte';
+	import * as Form from '$lib/components/ui/form';
+	import { superForm, defaults } from 'sveltekit-superforms';
+	import { zod4 } from 'sveltekit-superforms/adapters';
+
+	// Create search schema
+	const searchSchema = z.object({
+		lastName: z.string().min(2, 'Must be at least 2 characters'),
+		firstName: z.string().optional(),
+		patientId: z.string().optional(),
+		dateOfBirth: z.string().optional(),
+		phone: z.string().optional()
+	});
+
+	// Set up the form
+	const searchForm = superForm(defaults(zod4(searchSchema)), {
+		validators: zod4(searchSchema),
+		SPA: true,
+		onSubmit: () => {
+			handleSearch();
+		}
+	});
+
+	const { form: searchFormData, enhance: searchEnhance } = searchForm;
+
+	const patientSchema = z.object({
+		firstName: z.string().min(1, 'First name is required').max(100, 'First name too long'),
+		lastName: z.string().min(1, 'Last name is required').max(100, 'Last name too long'),
+		dateOfBirth: z.string().min(1, 'Date of birth is required'),
+		nationalId: z.string().max(20, 'National ID too long').optional(),
+		gender: z.enum(['male', 'female', 'other', '']).optional(),
+		phoneNumber: z.string().max(20, 'Phone number too long').optional(),
+		email: z.string().email('Invalid email format').or(z.literal('')).optional(),
+		address: z.string().max(200, 'Address too long').optional(),
+		postalCode: z.string().max(10, 'Postal code too long').optional(),
+		occupation: z.string().max(100, 'Occupation too long').optional(),
+		hobby: z.string().max(100, 'Hobby too long').optional()
+	});
+
+	// Create the patient form
+	const patientForm = superForm(defaults(zod4(patientSchema)), {
+		validators: zod4(patientSchema),
+		SPA: true,
+		onSubmit: async () => {
+			await createPatient();
+		}
+	});
+
+	const { form: patientFormData, enhance: patientEnhance } = patientForm;
 
 	// Patient type based on your Supabase schema
 	type Patient = {
@@ -32,15 +78,6 @@
 		created_by: string;
 	};
 
-	// Search filters state
-	let searchFilters = $state({
-		lastName: '',
-		firstName: '',
-		patientId: '',
-		dateOfBirth: '',
-		phone: ''
-	});
-
 	// Search results state
 	let searchResults = $state<Patient[]>([]);
 	let isSearching = $state(false);
@@ -49,67 +86,33 @@
 	// Dialog state
 	let dialogOpen = $state(false);
 	let isCreating = $state(false);
-	let validationErrors = $state<Record<string, string>>({});
-
-	// Zod schema for patient validation
-	const patientSchema = z.object({
-		firstName: z.string().min(1, 'First name is required').max(100, 'First name too long'),
-		lastName: z.string().min(1, 'Last name is required').max(100, 'Last name too long'),
-		dateOfBirth: z.string().min(1, 'Date of birth is required'),
-		nationalId: z.string().max(20, 'National ID too long').optional(),
-		gender: z.enum(['male', 'female', 'other', '']).optional(),
-		phoneNumber: z.string().max(20, 'Phone number too long').optional(),
-		email: z.string().email('Invalid email format').or(z.literal('')).optional(),
-		address: z.string().max(200, 'Address too long').optional(),
-		postalCode: z.string().max(10, 'Postal code too long').optional(),
-		occupation: z.string().max(100, 'Occupation too long').optional(),
-		hobby: z.string().max(100, 'Hobby too long').optional()
-	});
-
-	// New patient form
-	let newPatient = $state({
-		firstName: '',
-		lastName: '',
-		dateOfBirth: '',
-		nationalId: '',
-		gender: '',
-		phoneNumber: '',
-		email: '',
-		address: '',
-		postalCode: '',
-		occupation: '',
-		hobby: ''
-	});
 
 	async function handleSearch() {
 		isSearching = true;
 
 		try {
-			// Start with base query - only non-deleted patients
 			let query = supabase.from('patients').select('*').is('deleted_at', null);
 
-			// Add filters only if they have values
-			if (searchFilters.patientId) {
-				query = query.eq('patient_number', parseInt(searchFilters.patientId));
+			if ($searchFormData.patientId) {
+				query = query.eq('patient_number', parseInt($searchFormData.patientId));
 			}
 
-			if (searchFilters.lastName) {
-				query = query.ilike('last_name', `%${searchFilters.lastName}%`);
+			if ($searchFormData.lastName) {
+				query = query.ilike('last_name', `%${$searchFormData.lastName}%`);
 			}
 
-			if (searchFilters.firstName) {
-				query = query.ilike('first_name', `%${searchFilters.firstName}%`);
+			if ($searchFormData.firstName) {
+				query = query.ilike('first_name', `%${$searchFormData.firstName}%`);
 			}
 
-			if (searchFilters.dateOfBirth) {
-				query = query.eq('date_of_birth', searchFilters.dateOfBirth);
+			if ($searchFormData.dateOfBirth) {
+				query = query.eq('date_of_birth', $searchFormData.dateOfBirth);
 			}
 
-			if (searchFilters.phone) {
-				query = query.ilike('phone_number', `%${searchFilters.phone}%`);
+			if ($searchFormData.phone) {
+				query = query.ilike('phone_number', `%${$searchFormData.phone}%`);
 			}
 
-			// Order by last name
 			query = query.order('last_name', { ascending: true });
 
 			const { data, error } = await query;
@@ -131,7 +134,7 @@
 	}
 
 	function clearFilters() {
-		searchFilters = {
+		$searchFormData = {
 			lastName: '',
 			firstName: '',
 			patientId: '',
@@ -140,7 +143,6 @@
 		};
 		searchResults = [];
 		selectedPatient = null;
-		// Clear URL parameter
 		goto('', { replaceState: true });
 	}
 
@@ -155,22 +157,6 @@
 	}
 
 	async function createPatient() {
-		// Clear previous errors
-		validationErrors = {};
-
-		// Validate with Zod
-		const validation = patientSchema.safeParse(newPatient);
-
-		if (!validation.success) {
-			// Convert Zod errors to a simple object
-			validation.error.issues.forEach((err) => {
-				if (err.path[0]) {
-					validationErrors[err.path[0] as string] = err.message;
-				}
-			});
-			return;
-		}
-
 		isCreating = true;
 
 		try {
@@ -187,17 +173,17 @@
 			const { data, error } = await supabase
 				.from('patients')
 				.insert({
-					first_name: newPatient.firstName,
-					last_name: newPatient.lastName,
-					date_of_birth: newPatient.dateOfBirth,
-					national_id: newPatient.nationalId || null,
-					gender: newPatient.gender || null,
-					phone_number: newPatient.phoneNumber || null,
-					email: newPatient.email || null,
-					address: newPatient.address || null,
-					postal_code: newPatient.postalCode || null,
-					occupation: newPatient.occupation || null,
-					hobby: newPatient.hobby || null,
+					first_name: $patientFormData.firstName,
+					last_name: $patientFormData.lastName,
+					date_of_birth: $patientFormData.dateOfBirth,
+					national_id: $patientFormData.nationalId || null,
+					gender: $patientFormData.gender || null,
+					phone_number: $patientFormData.phoneNumber || null,
+					email: $patientFormData.email || null,
+					address: $patientFormData.address || null,
+					postal_code: $patientFormData.postalCode || null,
+					occupation: $patientFormData.occupation || null,
+					hobby: $patientFormData.hobby || null,
 					created_by: user.id
 				})
 				.select()
@@ -213,8 +199,8 @@
 				// Select the newly created patient
 				selectedPatient = data;
 
-				// Reset form
-				newPatient = {
+				// Reset form using superform's reset
+				$patientFormData = {
 					firstName: '',
 					lastName: '',
 					dateOfBirth: '',
@@ -227,9 +213,6 @@
 					occupation: '',
 					hobby: ''
 				};
-
-				// Clear validation errors
-				validationErrors = {};
 
 				// Close dialog
 				dialogOpen = false;
@@ -253,65 +236,80 @@
 				<Button
 					onclick={() => {
 						dialogOpen = true;
-						validationErrors = {};
 					}}
 				>
 					Create New Patient
 				</Button>
 			</div>
 
-			<form
-				onsubmit={(e) => {
-					e.preventDefault();
-					handleSearch();
-				}}
-				class="space-y-4"
-			>
+			<form use:searchEnhance class="space-y-4">
 				<div class="grid grid-cols-2 gap-4">
-					<div class="space-y-2">
-						<Label for="lastName">Last Name</Label>
-						<Input
-							id="lastName"
-							type="text"
-							placeholder="Enter last name"
-							bind:value={searchFilters.lastName}
-						/>
-					</div>
+					<Form.Field form={searchForm} name="lastName">
+						<Form.Control>
+							{#snippet children({ props })}
+								<Form.Label>Last Name</Form.Label>
+								<Input
+									{...props}
+									bind:value={$searchFormData.lastName}
+									placeholder="Enter last name"
+								/>
+							{/snippet}
+						</Form.Control>
+						<Form.FieldErrors />
+					</Form.Field>
 
-					<div class="space-y-2">
-						<Label for="firstName">First Name</Label>
-						<Input
-							id="firstName"
-							type="text"
-							placeholder="Enter first name"
-							bind:value={searchFilters.firstName}
-						/>
-					</div>
+					<Form.Field form={searchForm} name="firstName">
+						<Form.Control>
+							{#snippet children({ props })}
+								<Form.Label>First Name</Form.Label>
+								<Input
+									{...props}
+									bind:value={$searchFormData.firstName}
+									placeholder="Enter first name"
+								/>
+							{/snippet}
+						</Form.Control>
+						<Form.FieldErrors />
+					</Form.Field>
 
-					<div class="space-y-2">
-						<Label for="patientId">Patient ID</Label>
-						<Input
-							id="patientId"
-							type="text"
-							placeholder="Enter patient ID"
-							bind:value={searchFilters.patientId}
-						/>
-					</div>
+					<Form.Field form={searchForm} name="patientId">
+						<Form.Control>
+							{#snippet children({ props })}
+								<Form.Label>Patient ID</Form.Label>
+								<Input
+									{...props}
+									bind:value={$searchFormData.patientId}
+									placeholder="Enter patient ID"
+								/>
+							{/snippet}
+						</Form.Control>
+						<Form.FieldErrors />
+					</Form.Field>
 
-					<div class="space-y-2">
-						<Label for="dateOfBirth">Date of Birth</Label>
-						<Input id="dateOfBirth" type="date" bind:value={searchFilters.dateOfBirth} />
-					</div>
+					<Form.Field form={searchForm} name="dateOfBirth">
+						<Form.Control>
+							{#snippet children({ props })}
+								<Form.Label>Date of Birth</Form.Label>
+								<Input {...props} type="date" bind:value={$searchFormData.dateOfBirth} />
+							{/snippet}
+						</Form.Control>
+						<Form.FieldErrors />
+					</Form.Field>
 
-					<div class="space-y-2">
-						<Label for="phone">Phone Number</Label>
-						<Input
-							id="phone"
-							type="tel"
-							placeholder="Enter phone number"
-							bind:value={searchFilters.phone}
-						/>
-					</div>
+					<Form.Field form={searchForm} name="phone">
+						<Form.Control>
+							{#snippet children({ props })}
+								<Form.Label>Phone Number</Form.Label>
+								<Input
+									{...props}
+									type="tel"
+									bind:value={$searchFormData.phone}
+									placeholder="Enter phone number"
+								/>
+							{/snippet}
+						</Form.Control>
+						<Form.FieldErrors />
+					</Form.Field>
 				</div>
 
 				<div class="flex gap-2">
@@ -451,148 +449,162 @@
 			</Dialog.Description>
 		</Dialog.Header>
 
-		<form
-			onsubmit={(e) => {
-				e.preventDefault();
-				createPatient();
-			}}
-			class="space-y-4"
-		>
+		<form use:patientEnhance class="space-y-4">
 			<!-- Required Fields -->
 			<div class="grid grid-cols-2 gap-4">
-				<div class="space-y-2">
-					<Label for="newFirstName">First Name *</Label>
-					<Input
-						id="newFirstName"
-						type="text"
-						bind:value={newPatient.firstName}
-						placeholder="Enter first name"
-						class={validationErrors.firstName ? 'border-destructive' : ''}
-					/>
-					{#if validationErrors.firstName}
-						<p class="text-destructive text-sm">{validationErrors.firstName}</p>
-					{/if}
-				</div>
+				<Form.Field form={patientForm} name="firstName">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label>First Name *</Form.Label>
+							<Input
+								{...props}
+								bind:value={$patientFormData.firstName}
+								placeholder="Enter first name"
+							/>
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
 
-				<div class="space-y-2">
-					<Label for="newLastName">Last Name *</Label>
-					<Input
-						id="newLastName"
-						type="text"
-						bind:value={newPatient.lastName}
-						placeholder="Enter last name"
-						class={validationErrors.lastName ? 'border-destructive' : ''}
-					/>
-					{#if validationErrors.lastName}
-						<p class="text-destructive text-sm">{validationErrors.lastName}</p>
-					{/if}
-				</div>
+				<Form.Field form={patientForm} name="lastName">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label>Last Name *</Form.Label>
+							<Input
+								{...props}
+								bind:value={$patientFormData.lastName}
+								placeholder="Enter last name"
+							/>
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
 			</div>
 
-			<div class="space-y-2">
-				<Label for="newDateOfBirth">Date of Birth *</Label>
-				<Input
-					id="newDateOfBirth"
-					type="date"
-					bind:value={newPatient.dateOfBirth}
-					class={validationErrors.dateOfBirth ? 'border-destructive' : ''}
-				/>
-				{#if validationErrors.dateOfBirth}
-					<p class="text-destructive text-sm">{validationErrors.dateOfBirth}</p>
-				{/if}
-			</div>
+			<Form.Field form={patientForm} name="dateOfBirth">
+				<Form.Control>
+					{#snippet children({ props })}
+						<Form.Label>Date of Birth *</Form.Label>
+						<Input {...props} type="date" bind:value={$patientFormData.dateOfBirth} />
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors />
+			</Form.Field>
 
 			<!-- Optional Fields -->
-			<div class="space-y-2">
-				<Label for="newNationalId">National ID</Label>
-				<Input
-					id="newNationalId"
-					type="text"
-					bind:value={newPatient.nationalId}
-					placeholder="Enter national ID"
-				/>
-			</div>
+			<Form.Field form={patientForm} name="nationalId">
+				<Form.Control>
+					{#snippet children({ props })}
+						<Form.Label>National ID</Form.Label>
+						<Input
+							{...props}
+							bind:value={$patientFormData.nationalId}
+							placeholder="Enter national ID"
+						/>
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors />
+			</Form.Field>
 
-			<div class="space-y-2">
-				<Label for="newGender">Gender</Label>
-				<select
-					id="newGender"
-					bind:value={newPatient.gender}
-					class="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex h-10 w-full rounded-md border px-3 py-2 text-sm file:border-0 file:bg-transparent file:text-sm file:font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-				>
-					<option value="">Select gender</option>
-					<option value="male">Male</option>
-					<option value="female">Female</option>
-					<option value="other">Other</option>
-				</select>
-			</div>
-
-			<div class="grid grid-cols-2 gap-4">
-				<div class="space-y-2">
-					<Label for="newPhoneNumber">Phone Number</Label>
-					<Input
-						id="newPhoneNumber"
-						type="tel"
-						bind:value={newPatient.phoneNumber}
-						placeholder="Enter phone number"
-					/>
-				</div>
-
-				<div class="space-y-2">
-					<Label for="newEmail">Email</Label>
-					<Input
-						id="newEmail"
-						type="email"
-						bind:value={newPatient.email}
-						placeholder="Enter email"
-						class={validationErrors.email ? 'border-destructive' : ''}
-					/>
-					{#if validationErrors.email}
-						<p class="text-destructive text-sm">{validationErrors.email}</p>
-					{/if}
-				</div>
-			</div>
-
-			<div class="space-y-2">
-				<Label for="newAddress">Address</Label>
-				<Input
-					id="newAddress"
-					type="text"
-					bind:value={newPatient.address}
-					placeholder="Enter address"
-				/>
-			</div>
-
-			<div class="space-y-2">
-				<Label for="newPostalCode">Postal Code</Label>
-				<Input
-					id="newPostalCode"
-					type="text"
-					bind:value={newPatient.postalCode}
-					placeholder="Enter postal code"
-				/>
-			</div>
+			<Form.Field form={patientForm} name="gender">
+				<Form.Control>
+					{#snippet children({ props })}
+						<Form.Label>Gender</Form.Label>
+						<select
+							{...props}
+							bind:value={$patientFormData.gender}
+							class="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex h-10 w-full rounded-md border px-3 py-2 text-sm file:border-0 file:bg-transparent file:text-sm file:font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+						>
+							<option value="">Select gender</option>
+							<option value="male">Male</option>
+							<option value="female">Female</option>
+							<option value="other">Other</option>
+						</select>
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors />
+			</Form.Field>
 
 			<div class="grid grid-cols-2 gap-4">
-				<div class="space-y-2">
-					<Label for="newOccupation">Occupation</Label>
-					<Input
-						id="newOccupation"
-						type="text"
-						bind:value={newPatient.occupation}
-						placeholder="Enter occupation"
-					/>
-				</div>
+				<Form.Field form={patientForm} name="phoneNumber">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label>Phone Number</Form.Label>
+							<Input
+								{...props}
+								type="tel"
+								bind:value={$patientFormData.phoneNumber}
+								placeholder="Enter phone number"
+							/>
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
 
-				<div class="space-y-2">
-					<Label for="newHobby">Hobby</Label>
-					<Input
-						id="newHobby"
-						type="text"
-						bind:value={newPatient.hobby}
-						placeholder="Enter hobby"
-					/>
-				</div>
+				<Form.Field form={patientForm} name="email">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label>Email</Form.Label>
+							<Input
+								{...props}
+								type="email"
+								bind:value={$patientFormData.email}
+								placeholder="Enter email"
+							/>
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
+			</div>
+
+			<Form.Field form={patientForm} name="address">
+				<Form.Control>
+					{#snippet children({ props })}
+						<Form.Label>Address</Form.Label>
+						<Input {...props} bind:value={$patientFormData.address} placeholder="Enter address" />
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors />
+			</Form.Field>
+
+			<Form.Field form={patientForm} name="postalCode">
+				<Form.Control>
+					{#snippet children({ props })}
+						<Form.Label>Postal Code</Form.Label>
+						<Input
+							{...props}
+							bind:value={$patientFormData.postalCode}
+							placeholder="Enter postal code"
+						/>
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors />
+			</Form.Field>
+
+			<div class="grid grid-cols-2 gap-4">
+				<Form.Field form={patientForm} name="occupation">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label>Occupation</Form.Label>
+							<Input
+								{...props}
+								bind:value={$patientFormData.occupation}
+								placeholder="Enter occupation"
+							/>
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
+
+				<Form.Field form={patientForm} name="hobby">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label>Hobby</Form.Label>
+							<Input {...props} bind:value={$patientFormData.hobby} placeholder="Enter hobby" />
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
 			</div>
 
 			<Dialog.Footer>
@@ -600,8 +612,21 @@
 					type="button"
 					variant="outline"
 					onclick={() => {
+						// Reset form when user explicitly cancels
+						$patientFormData = {
+							firstName: '',
+							lastName: '',
+							dateOfBirth: '',
+							nationalId: '',
+							gender: '',
+							phoneNumber: '',
+							email: '',
+							address: '',
+							postalCode: '',
+							occupation: '',
+							hobby: ''
+						};
 						dialogOpen = false;
-						validationErrors = {};
 					}}
 				>
 					Cancel
