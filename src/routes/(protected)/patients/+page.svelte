@@ -4,6 +4,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import * as Table from '$lib/components/ui/table';
 	import * as Dialog from '$lib/components/ui/dialog';
+	import * as Select from '$lib/components/ui/select';
 	import { supabase } from '$lib/supabase';
 	import * as z from 'zod';
 	import { goto } from '$app/navigation';
@@ -313,7 +314,7 @@
 	}
 </script>
 
-<div class="w-max-[1920px] mx-auto flex min-h-screen w-full border-x-2 border-black">
+<div class="mx-auto flex min-h-screen w-full max-w-[1920px] border-x-2 border-black">
 	<div class="flex w-3/5 flex-col border-r-2 border-black">
 		<div class="space-y-4 p-6">
 			<div class="flex items-center justify-between">
@@ -541,17 +542,24 @@
 					<Form.Control>
 						{#snippet children({ props })}
 							<Form.Label>Gender</Form.Label>
-							<select
-								{...props}
+							<Select.Root
+								type="single"
 								bind:value={$editPatientFormData.gender}
+								name={props.name}
 								disabled={!isEditMode}
-								class="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex h-10 w-full rounded-md border px-3 py-2 text-sm file:border-0 file:bg-transparent file:text-sm file:font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
 							>
-								<option value="">Select gender</option>
-								<option value="male">Male</option>
-								<option value="female">Female</option>
-								<option value="other">Other</option>
-							</select>
+								<Select.Trigger {...props}>
+									{$editPatientFormData.gender
+										? $editPatientFormData.gender.charAt(0).toUpperCase() +
+											$editPatientFormData.gender.slice(1)
+										: 'Select gender'}
+								</Select.Trigger>
+								<Select.Content>
+									<Select.Item value="male" label="Male" />
+									<Select.Item value="female" label="Female" />
+									<Select.Item value="other" label="Other" />
+								</Select.Content>
+							</Select.Root>
 						{/snippet}
 					</Form.Control>
 					<Form.FieldErrors />
@@ -755,16 +763,19 @@
 				<Form.Control>
 					{#snippet children({ props })}
 						<Form.Label>Gender</Form.Label>
-						<select
-							{...props}
-							bind:value={$createPatientFormData.gender}
-							class="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex h-10 w-full rounded-md border px-3 py-2 text-sm file:border-0 file:bg-transparent file:text-sm file:font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-						>
-							<option value="">Select gender</option>
-							<option value="male">Male</option>
-							<option value="female">Female</option>
-							<option value="other">Other</option>
-						</select>
+						<Select.Root type="single" bind:value={$createPatientFormData.gender} name={props.name}>
+							<Select.Trigger {...props}>
+								{$createPatientFormData.gender
+									? $createPatientFormData.gender.charAt(0).toUpperCase() +
+										$createPatientFormData.gender.slice(1)
+									: 'Select gender'}
+							</Select.Trigger>
+							<Select.Content>
+								<Select.Item value="male" label="Male" />
+								<Select.Item value="female" label="Female" />
+								<Select.Item value="other" label="Other" />
+							</Select.Content>
+						</Select.Root>
 					{/snippet}
 				</Form.Control>
 				<Form.FieldErrors />
