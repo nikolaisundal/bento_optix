@@ -1,22 +1,35 @@
 <script lang="ts">
 	import type { PageData } from './$types';
 	export let data: PageData;
-
-	import bentoLogo from '$lib/assets/bentologo_main.png';
+	import { fade } from 'svelte/transition';
+	import autorefBalloon from '$lib/assets/autoref_balloon_video.mp4';
+	import bentoLogo from '$lib/assets/Bento_main_transparent.png';
 </script>
 
 <div
-	class=" mx-auto flex min-h-screen w-full max-w-[1920px] flex-col items-center space-y-10 border-x-2 border-black"
+	class=" mx-auto flex min-h-screen w-full max-w-[1920px] flex-col items-center border-x-2 border-black"
 >
 	<h1 class="mt-20 text-4xl">welcome to</h1>
-	<div class="w-[700px]">
+	<div class="mt-20 w-[700px]" in:fade={{ duration: 1500, delay: 200 }}>
 		<img
 			src={bentoLogo}
 			alt="bento optix logo. the two 'o' in the logo form a pair of spectacles in the middle"
 			class="h-auto w-full rounded-md"
 		/>
 	</div>
-	<div class="flex items-center space-x-2">
+	<video
+		class="mt-20 rounded-full border-black"
+		src={autorefBalloon}
+		aria-label="A hot air ballon at the end of a raod. NIDEK is going to sue me"
+		autoplay
+		muted
+		loop
+		playsinline
+		in:fade={{ duration: 1500, delay: 200 }}
+	>
+		<track kind="captions" />
+	</video>
+	<div class="mt-auto mb-8 flex items-center space-x-2">
 		<span class="text-xl text-gray-600">
 			Logged in as: {data.user?.email}
 		</span>

@@ -8,9 +8,11 @@
 	import { supabase } from '$lib/supabase';
 	import * as z from 'zod';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
 	import * as Form from '$lib/components/ui/form';
 	import { superForm, defaults } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
+	import { onMount } from 'svelte';
 
 	// Create search schema
 	const searchSchema = z.object({
@@ -98,10 +100,67 @@
 	let searchResults = $state<Patient[]>([]);
 	let isSearching = $state(false);
 	let selectedPatient = $state<Patient | null>(null);
+	let isLoadingPatient = $state(false);
 
 	// Dialog state
 	let dialogOpen = $state(false);
 	let isCreating = $state(false);
+
+	// Load patient from URL on mount and when URL changes
+	onMount(() => {
+		loadPatientFromUrl();
+	});
+
+	$effect(() => {
+		// Watch for URL changes
+		const patientId = $page.url.searchParams.get('patientId');
+		if (patientId && (!selectedPatient || selectedPatient.id !== patientId)) {
+			loadPatientFromUrl();
+		} else if (!patientId && selectedPatient) {
+			selectedPatient = null;
+		}
+	});
+
+	async function loadPatientFromUrl() {
+		const patientId = $page.url.searchParams.get('patientId');
+
+		if (!patientId) {
+			selectedPatient = null;
+			return;
+		}
+
+		// Don't reload if already selected
+		if (selectedPatient?.id === patientId) {
+			return;
+		}
+
+		isLoadingPatient = true;
+
+		try {
+			const { data, error } = await supabase
+				.from('patients')
+				.select('*')
+				.eq('id', patientId)
+				.is('deleted_at', null)
+				.single();
+
+			if (error || !data) {
+				console.error('Error loading patient:', error);
+				// Patient not found, clear URL
+				await goto('', { replaceState: true });
+				selectedPatient = null;
+			} else {
+				selectedPatient = data;
+				$editPatientFormData = patientToFormData(data);
+				isEditMode = false;
+			}
+		} catch (err) {
+			console.error('Unexpected error loading patient:', err);
+			selectedPatient = null;
+		} finally {
+			isLoadingPatient = false;
+		}
+	}
 
 	async function handleSearch() {
 		isSearching = true;
@@ -158,8 +217,11 @@
 			phone: ''
 		};
 		searchResults = [];
-		selectedPatient = null;
-		goto('', { replaceState: true });
+
+		// Keep the patient selected, just clear search
+		// If you want to also clear patient selection, uncomment:
+		// selectedPatient = null;
+		// goto('', { replaceState: true });
 	}
 
 	function formatDate(dateString: string | null): string {
@@ -207,9 +269,7 @@
 			}
 
 			if (data) {
-				selectedPatient = data;
-				$editPatientFormData = patientToFormData(data);
-
+				// Reset form
 				$createPatientFormData = {
 					firstName: '',
 					lastName: '',
@@ -226,6 +286,9 @@
 
 				dialogOpen = false;
 				alert('Patient created successfully!');
+
+				// Select the newly created patient by updating URL
+				await selectPatient(data);
 			}
 		} catch (err) {
 			console.error('Unexpected error:', err);
@@ -307,10 +370,16 @@
 		};
 	}
 
-	function selectPatient(patient: Patient) {
-		selectedPatient = patient;
+	async function selectPatient(patient: Patient) {
+		// Update URL with patient ID
+		await goto(`?patientId=${patient.id}`, { keepFocus: true });
+		// The $effect will handle loading the patient
+	}
+
+	async function deselectPatient() {
+		await goto($page.url.pathname, { replaceState: true });
+		selectedPatient = null;
 		isEditMode = false;
-		$editPatientFormData = patientToFormData(patient);
 	}
 </script>
 
@@ -424,7 +493,9 @@
 						<Table.Body>
 							{#each searchResults as patient (patient.id)}
 								<Table.Row
-									class="hover:bg-muted/50 cursor-pointer"
+									class="hover:bg-muted/50 cursor-pointer {selectedPatient?.id === patient.id
+										? 'bg-muted'
+										: ''}"
 									onclick={() => selectPatient(patient)}
 								>
 									<Table.Cell class="font-medium">
@@ -453,24 +524,31 @@
 	</div>
 
 	<div class="w-2/5 p-6">
-		{#if selectedPatient}
+		{#if isLoadingPatient}
+			<div class="flex items-center justify-center py-12">
+				<p class="text-muted-foreground">Loading patient...</p>
+			</div>
+		{:else if selectedPatient}
 			<div class="mb-4 flex items-center justify-between">
 				<h2 class="text-2xl font-bold">Patient Info</h2>
-				{#if !isEditMode}
-					<Button
-						onclick={() => {
-							isEditMode = true;
-						}}
-					>
-						Edit
-					</Button>
-				{/if}
+				<div class="flex gap-2">
+					{#if !isEditMode}
+						<Button
+							onclick={() => {
+								isEditMode = true;
+							}}
+						>
+							Edit
+						</Button>
+					{/if}
+					<Button variant="outline" size="sm" onclick={deselectPatient}>Deselect</Button>
+				</div>
 			</div>
 
 			<form use:editPatientEnhance class="space-y-4">
 				<!-- Patient Number (always disabled) -->
 				<div class="space-y-2">
-					<Label>Patient #</Label>
+					<Label>Patient ID</Label>
 					<Input disabled value={selectedPatient.patient_number} />
 				</div>
 
