@@ -9,7 +9,6 @@
 <div
 	class=" mx-auto flex min-h-screen w-full max-w-[1920px] flex-col items-center border-x-2 border-black"
 >
-	<h1 class="mt-20 text-4xl">welcome to</h1>
 	<div class="mt-20 w-[700px]" in:fade={{ duration: 1500, delay: 200 }}>
 		<img
 			src={bentoLogo}
@@ -29,7 +28,7 @@
 	>
 		<track kind="captions" />
 	</video>
-	<div class="mt-auto mb-8 flex items-center space-x-2">
+	<div class="mt-28 mb-8 flex items-center space-x-2">
 		<span class="text-xl text-gray-600">
 			Logged in as: {data.user?.email}
 		</span>

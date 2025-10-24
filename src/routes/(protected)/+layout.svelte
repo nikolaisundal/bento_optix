@@ -4,7 +4,11 @@
 	import type { LayoutData } from './$types';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import hamburgerIcon from '$lib/assets/hamburger_menu.svg';
+	import SunIcon from '@lucide/svelte/icons/sun';
+	import MoonIcon from '@lucide/svelte/icons/moon';
 
+	import { toggleMode } from 'mode-watcher';
+	import { Button } from '$lib/components/ui/button/index.js';
 	let { data, children }: { data: LayoutData; children: any } = $props();
 
 	async function handleLogout() {
@@ -14,7 +18,7 @@
 </script>
 
 <div class="min-h-screen w-full">
-	<nav class="flex w-full items-center bg-gray-50">
+	<nav class="flex w-full items-center bg-gray-50 dark:bg-gray-900">
 		<DropdownMenu.Root>
 			<DropdownMenu.Trigger
 				class="ml-2 h-10 w-10 cursor-pointer rounded-md bg-slate-200 p-1 hover:bg-slate-300 data-[state=open]:bg-slate-300 "
@@ -36,7 +40,16 @@
 			</DropdownMenu.Content>
 		</DropdownMenu.Root>
 
-		<div class="flex w-full justify-end">
+		<div class="flex w-full items-center justify-end">
+			<Button onclick={toggleMode} variant="outline" size="icon">
+				<SunIcon
+					class="h-[1.2rem] w-[1.2rem] scale-100 rotate-0 !transition-all dark:scale-0 dark:-rotate-90"
+				/>
+				<MoonIcon
+					class="absolute h-[1.2rem] w-[1.2rem] scale-0 rotate-90 !transition-all dark:scale-100 dark:rotate-0"
+				/>
+				<span class="sr-only">Toggle theme</span>
+			</Button>
 			<p class="p-4 text-gray-600">
 				Logged in as: {data.user?.email}
 			</p>

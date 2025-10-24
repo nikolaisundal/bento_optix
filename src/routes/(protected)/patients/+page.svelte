@@ -2,14 +2,25 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Button } from '$lib/components/ui/button';
+	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import * as Table from '$lib/components/ui/table';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as Select from '$lib/components/ui/select';
+	import * as Form from '$lib/components/ui/form';
+	import * as Tabs from '$lib/components/ui/tabs/index.js';
+	import * as Card from '$lib/components/ui/card/index.js';
+
+	import SaveIcon from '@lucide/svelte/icons/save';
+	import PencilIcon from '@lucide/svelte/icons/pencil';
+	import Trash2Icon from '@lucide/svelte/icons/trash-2';
+	import PlusIcon from '@lucide/svelte/icons/plus';
+	import XIcon from '@lucide/svelte/icons/x';
+
 	import { supabase } from '$lib/supabase';
 	import * as z from 'zod';
 	import { goto } from '$app/navigation';
-	import { page } from '$app/stores';
-	import * as Form from '$lib/components/ui/form';
+	import { page } from '$app/state';
+
 	import { superForm, defaults } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import { onMount } from 'svelte';
@@ -71,6 +82,24 @@
 
 	const { form: editPatientFormData, enhance: editPatientEnhance } = editPatientForm;
 
+	const noteSchema = z.object({
+		noteText: z.string().min(1, 'Must contain at least 1 character'),
+		noteDate: z.string().min(1, 'Date is required')
+	});
+
+	const createNoteForm = superForm(defaults(zod4(noteSchema)), {
+		validators: zod4(noteSchema),
+		SPA: true,
+		onSubmit: async () => {
+			await createNote();
+		}
+	});
+	const { form: createNoteFormData, enhance: createNoteEnhance } = createNoteForm;
+
+	async function createNote() {
+		console.log('hey');
+	}
+
 	// Patient type based on your Supabase schema
 	type Patient = {
 		id: string;
@@ -106,6 +135,9 @@
 	let dialogOpen = $state(false);
 	let isCreating = $state(false);
 
+	//notes
+	let newNoteActive = $state(true);
+
 	// Load patient from URL on mount and when URL changes
 	onMount(() => {
 		loadPatientFromUrl();
@@ -113,7 +145,7 @@
 
 	$effect(() => {
 		// Watch for URL changes
-		const patientId = $page.url.searchParams.get('patientId');
+		const patientId = page.url.searchParams.get('patientId');
 		if (patientId && (!selectedPatient || selectedPatient.id !== patientId)) {
 			loadPatientFromUrl();
 		} else if (!patientId && selectedPatient) {
@@ -122,7 +154,7 @@
 	});
 
 	async function loadPatientFromUrl() {
-		const patientId = $page.url.searchParams.get('patientId');
+		const patientId = page.url.searchParams.get('patientId');
 
 		if (!patientId) {
 			selectedPatient = null;
@@ -217,11 +249,6 @@
 			phone: ''
 		};
 		searchResults = [];
-
-		// Keep the patient selected, just clear search
-		// If you want to also clear patient selection, uncomment:
-		// selectedPatient = null;
-		// goto('', { replaceState: true });
 	}
 
 	function formatDate(dateString: string | null): string {
@@ -377,12 +404,13 @@
 	}
 
 	async function deselectPatient() {
-		await goto($page.url.pathname, { replaceState: true });
+		await goto(page.url.pathname, { replaceState: true });
 		selectedPatient = null;
 		isEditMode = false;
 	}
 </script>
 
+<!-- search -->
 <div class="mx-auto flex min-h-screen w-full max-w-[1920px] border-x-2 border-black">
 	<div class="flex w-3/5 flex-col border-r-2 border-black">
 		<div class="space-y-4 p-6">
@@ -522,6 +550,7 @@
 			{/if}
 		</div>
 	</div>
+	<!-- patient info -->
 
 	<div class="w-2/5 p-6">
 		{#if isLoadingPatient}
@@ -531,6 +560,7 @@
 		{:else if selectedPatient}
 			<div class="mb-4 flex items-center justify-between">
 				<h2 class="text-2xl font-bold">Patient Info</h2>
+
 				<div class="flex gap-2">
 					{#if !isEditMode}
 						<Button
@@ -545,223 +575,310 @@
 				</div>
 			</div>
 
-			<form use:editPatientEnhance class="space-y-4">
-				<!-- Patient Number (always disabled) -->
-				<div class="space-y-2">
-					<Label>Patient ID</Label>
-					<Input disabled value={selectedPatient.patient_number} />
+			{#if newNoteActive}<Tabs.Root value="notes" class="w-full">
+					<Tabs.List>
+						<Tabs.Trigger value="info">Info</Tabs.Trigger>
+						<Tabs.Trigger value="notes">Notes</Tabs.Trigger>
+					</Tabs.List>
+					<Tabs.Content value="info"
+						><form use:editPatientEnhance class="space-y-4">
+							<!-- Patient Number (always disabled) -->
+							<div class="space-y-2">
+								<Label>Patient ID</Label>
+								<Input disabled value={selectedPatient.patient_number} />
+							</div>
+
+							<!-- First Name & Last Name -->
+							<div class="grid grid-cols-2 gap-4">
+								<Form.Field form={editPatientForm} name="firstName">
+									<Form.Control>
+										{#snippet children({ props })}
+											<Form.Label>First Name</Form.Label>
+											<Input
+												{...props}
+												bind:value={$editPatientFormData.firstName}
+												disabled={!isEditMode}
+											/>
+										{/snippet}
+									</Form.Control>
+									<Form.FieldErrors />
+								</Form.Field>
+
+								<Form.Field form={editPatientForm} name="lastName">
+									<Form.Control>
+										{#snippet children({ props })}
+											<Form.Label>Last Name</Form.Label>
+											<Input
+												{...props}
+												bind:value={$editPatientFormData.lastName}
+												disabled={!isEditMode}
+											/>
+										{/snippet}
+									</Form.Control>
+									<Form.FieldErrors />
+								</Form.Field>
+							</div>
+
+							<!-- Date of Birth -->
+							<Form.Field form={editPatientForm} name="dateOfBirth">
+								<Form.Control>
+									{#snippet children({ props })}
+										<Form.Label>Date of Birth</Form.Label>
+										<Input
+											{...props}
+											type="date"
+											bind:value={$editPatientFormData.dateOfBirth}
+											disabled={!isEditMode}
+										/>
+									{/snippet}
+								</Form.Control>
+								<Form.FieldErrors />
+							</Form.Field>
+
+							<!-- National ID -->
+							<Form.Field form={editPatientForm} name="nationalId">
+								<Form.Control>
+									{#snippet children({ props })}
+										<Form.Label>National ID</Form.Label>
+										<Input
+											{...props}
+											bind:value={$editPatientFormData.nationalId}
+											disabled={!isEditMode}
+											placeholder="N/A"
+										/>
+									{/snippet}
+								</Form.Control>
+								<Form.FieldErrors />
+							</Form.Field>
+
+							<!-- Gender -->
+							<Form.Field form={editPatientForm} name="gender">
+								<Form.Control>
+									{#snippet children({ props })}
+										<Form.Label>Gender</Form.Label>
+										<Select.Root
+											type="single"
+											bind:value={$editPatientFormData.gender}
+											name={props.name}
+											disabled={!isEditMode}
+										>
+											<Select.Trigger {...props}>
+												{$editPatientFormData.gender
+													? $editPatientFormData.gender.charAt(0).toUpperCase() +
+														$editPatientFormData.gender.slice(1)
+													: 'Select gender'}
+											</Select.Trigger>
+											<Select.Content>
+												<Select.Item value="male" label="Male" />
+												<Select.Item value="female" label="Female" />
+												<Select.Item value="other" label="Other" />
+											</Select.Content>
+										</Select.Root>
+									{/snippet}
+								</Form.Control>
+								<Form.FieldErrors />
+							</Form.Field>
+
+							<!-- Phone Number -->
+							<Form.Field form={editPatientForm} name="phoneNumber">
+								<Form.Control>
+									{#snippet children({ props })}
+										<Form.Label>Phone Number</Form.Label>
+										<Input
+											{...props}
+											type="tel"
+											bind:value={$editPatientFormData.phoneNumber}
+											disabled={!isEditMode}
+											placeholder="N/A"
+										/>
+									{/snippet}
+								</Form.Control>
+								<Form.FieldErrors />
+							</Form.Field>
+
+							<!-- Email -->
+							<Form.Field form={editPatientForm} name="email">
+								<Form.Control>
+									{#snippet children({ props })}
+										<Form.Label>Email</Form.Label>
+										<Input
+											{...props}
+											type="email"
+											bind:value={$editPatientFormData.email}
+											disabled={!isEditMode}
+											placeholder="N/A"
+										/>
+									{/snippet}
+								</Form.Control>
+								<Form.FieldErrors />
+							</Form.Field>
+
+							<!-- Address -->
+							<Form.Field form={editPatientForm} name="address">
+								<Form.Control>
+									{#snippet children({ props })}
+										<Form.Label>Address</Form.Label>
+										<Input
+											{...props}
+											bind:value={$editPatientFormData.address}
+											disabled={!isEditMode}
+											placeholder="N/A"
+										/>
+									{/snippet}
+								</Form.Control>
+								<Form.FieldErrors />
+							</Form.Field>
+
+							<!-- Postal Code -->
+							<Form.Field form={editPatientForm} name="postalCode">
+								<Form.Control>
+									{#snippet children({ props })}
+										<Form.Label>Postal Code</Form.Label>
+										<Input
+											{...props}
+											bind:value={$editPatientFormData.postalCode}
+											disabled={!isEditMode}
+											placeholder="N/A"
+										/>
+									{/snippet}
+								</Form.Control>
+								<Form.FieldErrors />
+							</Form.Field>
+
+							<!-- Occupation -->
+							<Form.Field form={editPatientForm} name="occupation">
+								<Form.Control>
+									{#snippet children({ props })}
+										<Form.Label>Occupation</Form.Label>
+										<Input
+											{...props}
+											bind:value={$editPatientFormData.occupation}
+											disabled={!isEditMode}
+											placeholder="N/A"
+										/>
+									{/snippet}
+								</Form.Control>
+								<Form.FieldErrors />
+							</Form.Field>
+
+							<!-- Hobby -->
+							<Form.Field form={editPatientForm} name="hobby">
+								<Form.Control>
+									{#snippet children({ props })}
+										<Form.Label>Hobby</Form.Label>
+										<Input
+											{...props}
+											bind:value={$editPatientFormData.hobby}
+											disabled={!isEditMode}
+											placeholder="N/A"
+										/>
+									{/snippet}
+								</Form.Control>
+								<Form.FieldErrors />
+							</Form.Field>
+
+							<!-- Action Buttons (only show in edit mode) -->
+							{#if isEditMode}
+								<div class="flex gap-2">
+									<Button type="submit" disabled={isUpdating}>
+										{isUpdating ? 'Saving...' : 'Save Changes'}
+									</Button>
+									<Button
+										type="button"
+										variant="outline"
+										onclick={() => {
+											isEditMode = false;
+											if (selectedPatient) {
+												$editPatientFormData = patientToFormData(selectedPatient);
+											}
+										}}
+									>
+										Cancel
+									</Button>
+								</div>
+							{/if}
+						</form></Tabs.Content
+					>
+					<Tabs.Content value="notes"
+						><Card.Root class="w-full">
+							<Card.Content>
+								<form method="POST" class="w-full space-y-6" use:createNoteEnhance>
+									<Form.Field form={createNoteForm} name="noteText">
+										<Form.Control>
+											{#snippet children({ props })}
+												<div class="flex flex-row">
+													<Form.Label
+														><div class="mr-4 flex flex-col items-center space-y-1">
+															<span>07.12</span>
+															<span>1990</span>
+														</div></Form.Label
+													>
+													<Textarea
+														{...props}
+														placeholder="Tell us a little bit about yourself"
+														class="resize-none"
+														bind:value={$createNoteFormData.noteText}
+													/>
+													<div class="ml-4 flex flex-col space-y-4">
+														<Form.Button
+															><SaveIcon
+																class="h-4 w-4 text-green-300 dark:text-green-600"
+															/></Form.Button
+														>
+
+														<Form.Button
+															><Trash2Icon
+																class="h-4 w-4 text-red-400 dark:text-red-700"
+															/></Form.Button
+														>
+													</div>
+												</div>
+											{/snippet}
+										</Form.Control>
+										<Form.FieldErrors />
+									</Form.Field>
+								</form>
+							</Card.Content>
+						</Card.Root>
+						<Card.Root class="w-full">
+							<Card.Content>
+								<form method="POST" class="w-full space-y-6" use:createNoteEnhance>
+									<Form.Field form={createNoteForm} name="noteText">
+										<Form.Control>
+											{#snippet children({ props })}
+												<Form.Label>07/12/1982</Form.Label>
+												<Textarea
+													{...props}
+													placeholder="Tell us a little bit about yourself"
+													class="resize-none"
+													bind:value={$createNoteFormData.noteText}
+												/>
+											{/snippet}
+										</Form.Control>
+										<Form.FieldErrors />
+									</Form.Field>
+									<div class="flex justify-between">
+										<Form.Button
+											><PencilIcon
+												class="h-4 w-4 text-green-300 dark:text-green-600"
+											/></Form.Button
+										>
+
+										<Form.Button
+											><Trash2Icon class="h-4 w-4 text-red-400 dark:text-red-700" /></Form.Button
+										>
+									</div>
+								</form>
+							</Card.Content>
+						</Card.Root></Tabs.Content
+					>
+				</Tabs.Root>
+			{:else}<div>
+					<Button onclick={() => (newNoteActive = true)}
+						><PlusIcon class="h-4 w-4" /> Add new</Button
+					>
 				</div>
-
-				<!-- First Name & Last Name -->
-				<div class="grid grid-cols-2 gap-4">
-					<Form.Field form={editPatientForm} name="firstName">
-						<Form.Control>
-							{#snippet children({ props })}
-								<Form.Label>First Name</Form.Label>
-								<Input
-									{...props}
-									bind:value={$editPatientFormData.firstName}
-									disabled={!isEditMode}
-								/>
-							{/snippet}
-						</Form.Control>
-						<Form.FieldErrors />
-					</Form.Field>
-
-					<Form.Field form={editPatientForm} name="lastName">
-						<Form.Control>
-							{#snippet children({ props })}
-								<Form.Label>Last Name</Form.Label>
-								<Input
-									{...props}
-									bind:value={$editPatientFormData.lastName}
-									disabled={!isEditMode}
-								/>
-							{/snippet}
-						</Form.Control>
-						<Form.FieldErrors />
-					</Form.Field>
-				</div>
-
-				<!-- Date of Birth -->
-				<Form.Field form={editPatientForm} name="dateOfBirth">
-					<Form.Control>
-						{#snippet children({ props })}
-							<Form.Label>Date of Birth</Form.Label>
-							<Input
-								{...props}
-								type="date"
-								bind:value={$editPatientFormData.dateOfBirth}
-								disabled={!isEditMode}
-							/>
-						{/snippet}
-					</Form.Control>
-					<Form.FieldErrors />
-				</Form.Field>
-
-				<!-- National ID -->
-				<Form.Field form={editPatientForm} name="nationalId">
-					<Form.Control>
-						{#snippet children({ props })}
-							<Form.Label>National ID</Form.Label>
-							<Input
-								{...props}
-								bind:value={$editPatientFormData.nationalId}
-								disabled={!isEditMode}
-								placeholder="N/A"
-							/>
-						{/snippet}
-					</Form.Control>
-					<Form.FieldErrors />
-				</Form.Field>
-
-				<!-- Gender -->
-				<Form.Field form={editPatientForm} name="gender">
-					<Form.Control>
-						{#snippet children({ props })}
-							<Form.Label>Gender</Form.Label>
-							<Select.Root
-								type="single"
-								bind:value={$editPatientFormData.gender}
-								name={props.name}
-								disabled={!isEditMode}
-							>
-								<Select.Trigger {...props}>
-									{$editPatientFormData.gender
-										? $editPatientFormData.gender.charAt(0).toUpperCase() +
-											$editPatientFormData.gender.slice(1)
-										: 'Select gender'}
-								</Select.Trigger>
-								<Select.Content>
-									<Select.Item value="male" label="Male" />
-									<Select.Item value="female" label="Female" />
-									<Select.Item value="other" label="Other" />
-								</Select.Content>
-							</Select.Root>
-						{/snippet}
-					</Form.Control>
-					<Form.FieldErrors />
-				</Form.Field>
-
-				<!-- Phone Number -->
-				<Form.Field form={editPatientForm} name="phoneNumber">
-					<Form.Control>
-						{#snippet children({ props })}
-							<Form.Label>Phone Number</Form.Label>
-							<Input
-								{...props}
-								type="tel"
-								bind:value={$editPatientFormData.phoneNumber}
-								disabled={!isEditMode}
-								placeholder="N/A"
-							/>
-						{/snippet}
-					</Form.Control>
-					<Form.FieldErrors />
-				</Form.Field>
-
-				<!-- Email -->
-				<Form.Field form={editPatientForm} name="email">
-					<Form.Control>
-						{#snippet children({ props })}
-							<Form.Label>Email</Form.Label>
-							<Input
-								{...props}
-								type="email"
-								bind:value={$editPatientFormData.email}
-								disabled={!isEditMode}
-								placeholder="N/A"
-							/>
-						{/snippet}
-					</Form.Control>
-					<Form.FieldErrors />
-				</Form.Field>
-
-				<!-- Address -->
-				<Form.Field form={editPatientForm} name="address">
-					<Form.Control>
-						{#snippet children({ props })}
-							<Form.Label>Address</Form.Label>
-							<Input
-								{...props}
-								bind:value={$editPatientFormData.address}
-								disabled={!isEditMode}
-								placeholder="N/A"
-							/>
-						{/snippet}
-					</Form.Control>
-					<Form.FieldErrors />
-				</Form.Field>
-
-				<!-- Postal Code -->
-				<Form.Field form={editPatientForm} name="postalCode">
-					<Form.Control>
-						{#snippet children({ props })}
-							<Form.Label>Postal Code</Form.Label>
-							<Input
-								{...props}
-								bind:value={$editPatientFormData.postalCode}
-								disabled={!isEditMode}
-								placeholder="N/A"
-							/>
-						{/snippet}
-					</Form.Control>
-					<Form.FieldErrors />
-				</Form.Field>
-
-				<!-- Occupation -->
-				<Form.Field form={editPatientForm} name="occupation">
-					<Form.Control>
-						{#snippet children({ props })}
-							<Form.Label>Occupation</Form.Label>
-							<Input
-								{...props}
-								bind:value={$editPatientFormData.occupation}
-								disabled={!isEditMode}
-								placeholder="N/A"
-							/>
-						{/snippet}
-					</Form.Control>
-					<Form.FieldErrors />
-				</Form.Field>
-
-				<!-- Hobby -->
-				<Form.Field form={editPatientForm} name="hobby">
-					<Form.Control>
-						{#snippet children({ props })}
-							<Form.Label>Hobby</Form.Label>
-							<Input
-								{...props}
-								bind:value={$editPatientFormData.hobby}
-								disabled={!isEditMode}
-								placeholder="N/A"
-							/>
-						{/snippet}
-					</Form.Control>
-					<Form.FieldErrors />
-				</Form.Field>
-
-				<!-- Action Buttons (only show in edit mode) -->
-				{#if isEditMode}
-					<div class="flex gap-2">
-						<Button type="submit" disabled={isUpdating}>
-							{isUpdating ? 'Saving...' : 'Save Changes'}
-						</Button>
-						<Button
-							type="button"
-							variant="outline"
-							onclick={() => {
-								isEditMode = false;
-								if (selectedPatient) {
-									$editPatientFormData = patientToFormData(selectedPatient);
-								}
-							}}
-						>
-							Cancel
-						</Button>
-					</div>
-				{/if}
-			</form>
+			{/if}
 		{:else}
 			<p class="text-muted-foreground text-center">
 				Select a patient from the search results to view details
@@ -769,8 +886,11 @@
 		{/if}
 	</div>
 </div>
-
-<!-- Create Patient Dialog -->
+<!--   import SaveIcon from '@lucide/svelte/icons/save';
+  import PencilIcon from '@lucide/svelte/icons/pencil';
+  import Trash2Icon from '@lucide/svelte/icons/trash-2';
+  import PlusIcon from '@lucide/svelte/icons/plus';
+  import XIcon from '@lucide/svelte/icons/x'; -->
 <Dialog.Root bind:open={dialogOpen}>
 	<Dialog.Content class="max-h-[90vh] max-w-2xl overflow-y-auto">
 		<Dialog.Header>
