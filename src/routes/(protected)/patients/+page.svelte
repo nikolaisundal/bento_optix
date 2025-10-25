@@ -103,7 +103,7 @@
 
 		try {
 			const { data, error } = await supabase
-				.from('notes')
+				.from('patient_notes')
 				.select('*')
 				.eq('patient_id', selectedPatient.id)
 				.is('deleted_at', null)
@@ -141,12 +141,11 @@
 			const today = new Date().toISOString().split('T')[0];
 
 			const { data, error } = await supabase
-				.from('notes')
+				.from('patient_notes')
 				.insert({
 					patient_id: selectedPatient.id,
 					note_text: $createNoteFormData.noteText,
-					note_date: today,
-					created_by: user.id
+					note_date: today
 				})
 				.select()
 				.single();
@@ -185,7 +184,7 @@
 			}
 
 			const { data, error } = await supabase
-				.from('notes')
+				.from('patient_notes')
 				.update({
 					note_text: editNoteText[noteId]
 				})
@@ -229,7 +228,7 @@
 			}
 
 			const { error } = await supabase
-				.from('notes')
+				.from('patient_notes')
 				.update({
 					deleted_at: new Date().toISOString(),
 					deleted_by: user.id
@@ -282,7 +281,7 @@
 		created_by: string;
 	};
 
-	// Note type based on Supabase schema
+	// Note type based on Supabase patient_notes schema
 	type Note = {
 		id: string;
 		patient_id: string;
@@ -292,7 +291,6 @@
 		updated_at: string;
 		deleted_at: string | null;
 		deleted_by: string | null;
-		created_by: string;
 	};
 
 	let isEditMode = $state(false);
