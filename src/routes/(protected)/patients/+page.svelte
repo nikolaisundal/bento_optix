@@ -96,8 +96,168 @@
 	});
 	const { form: createNoteFormData, enhance: createNoteEnhance } = createNoteForm;
 
+	async function fetchNotes() {
+		if (!selectedPatient) return;
+
+		isLoadingNotes = true;
+
+		try {
+			const { data, error } = await supabase
+				.from('notes')
+				.select('*')
+				.eq('patient_id', selectedPatient.id)
+				.is('deleted_at', null)
+				.order('note_date', { ascending: false });
+
+			if (error) {
+				console.error('Error fetching notes:', error);
+				alert('Error fetching notes: ' + error.message);
+				notes = [];
+			} else {
+				notes = data || [];
+			}
+		} catch (err) {
+			console.error('Unexpected error fetching notes:', err);
+			notes = [];
+		} finally {
+			isLoadingNotes = false;
+		}
+	}
+
 	async function createNote() {
-		console.log('hey');
+		if (!selectedPatient) return;
+
+		try {
+			const {
+				data: { user }
+			} = await supabase.auth.getUser();
+
+			if (!user) {
+				alert('You must be logged in to create a note');
+				return;
+			}
+
+			// Get today's date in YYYY-MM-DD format
+			const today = new Date().toISOString().split('T')[0];
+
+			const { data, error } = await supabase
+				.from('notes')
+				.insert({
+					patient_id: selectedPatient.id,
+					note_text: $createNoteFormData.noteText,
+					note_date: today,
+					created_by: user.id
+				})
+				.select()
+				.single();
+
+			if (error) {
+				console.error('Error creating note:', error);
+				alert('Error creating note: ' + error.message);
+				return;
+			}
+
+			if (data) {
+				// Reset form
+				$createNoteFormData = {
+					noteText: '',
+					noteDate: ''
+				};
+
+				// Reload notes
+				await fetchNotes();
+			}
+		} catch (err) {
+			console.error('Unexpected error:', err);
+			alert('An unexpected error occurred');
+		}
+	}
+
+	async function updateNote(noteId: string) {
+		try {
+			const {
+				data: { user }
+			} = await supabase.auth.getUser();
+
+			if (!user) {
+				alert('You must be logged in to update a note');
+				return;
+			}
+
+			const { data, error } = await supabase
+				.from('notes')
+				.update({
+					note_text: editNoteText[noteId]
+				})
+				.eq('id', noteId)
+				.select()
+				.single();
+
+			if (error) {
+				console.error('Error updating note:', error);
+				alert('Error updating note: ' + error.message);
+				return;
+			}
+
+			if (data) {
+				// Exit edit mode
+				editingNoteId = null;
+				delete editNoteText[noteId];
+
+				// Reload notes
+				await fetchNotes();
+			}
+		} catch (err) {
+			console.error('Unexpected error:', err);
+			alert('An unexpected error occurred');
+		}
+	}
+
+	async function deleteNote(noteId: string) {
+		if (!confirm('Are you sure you want to delete this note?')) {
+			return;
+		}
+
+		try {
+			const {
+				data: { user }
+			} = await supabase.auth.getUser();
+
+			if (!user) {
+				alert('You must be logged in to delete a note');
+				return;
+			}
+
+			const { error } = await supabase
+				.from('notes')
+				.update({
+					deleted_at: new Date().toISOString(),
+					deleted_by: user.id
+				})
+				.eq('id', noteId);
+
+			if (error) {
+				console.error('Error deleting note:', error);
+				alert('Error deleting note: ' + error.message);
+				return;
+			}
+
+			// Reload notes
+			await fetchNotes();
+		} catch (err) {
+			console.error('Unexpected error:', err);
+			alert('An unexpected error occurred');
+		}
+	}
+
+	function startEditingNote(note: Note) {
+		editingNoteId = note.id;
+		editNoteText[note.id] = note.note_text;
+	}
+
+	function cancelEditingNote(noteId: string) {
+		editingNoteId = null;
+		delete editNoteText[noteId];
 	}
 
 	// Patient type based on your Supabase schema
@@ -122,6 +282,19 @@
 		created_by: string;
 	};
 
+	// Note type based on Supabase schema
+	type Note = {
+		id: string;
+		patient_id: string;
+		note_text: string;
+		note_date: string;
+		created_at: string;
+		updated_at: string;
+		deleted_at: string | null;
+		deleted_by: string | null;
+		created_by: string;
+	};
+
 	let isEditMode = $state(false);
 	let isUpdating = $state(false);
 
@@ -135,8 +308,11 @@
 	let dialogOpen = $state(false);
 	let isCreating = $state(false);
 
-	//notes
-	let newNoteActive = $state(true);
+	// Notes state
+	let notes = $state<Note[]>([]);
+	let isLoadingNotes = $state(false);
+	let editingNoteId = $state<string | null>(null);
+	let editNoteText = $state<{ [key: string]: string }>({});
 
 	// Load patient from URL on mount and when URL changes
 	onMount(() => {
@@ -158,6 +334,7 @@
 
 		if (!patientId) {
 			selectedPatient = null;
+			notes = [];
 			return;
 		}
 
@@ -181,14 +358,18 @@
 				// Patient not found, clear URL
 				await goto('', { replaceState: true });
 				selectedPatient = null;
+				notes = [];
 			} else {
 				selectedPatient = data;
 				$editPatientFormData = patientToFormData(data);
 				isEditMode = false;
+				// Load notes for this patient
+				await fetchNotes();
 			}
 		} catch (err) {
 			console.error('Unexpected error loading patient:', err);
 			selectedPatient = null;
+			notes = [];
 		} finally {
 			isLoadingPatient = false;
 		}
@@ -255,6 +436,17 @@
 		if (!dateString) return '';
 		const date = new Date(dateString);
 		return date.toLocaleDateString('nb-NO'); // Norwegian format: DD.MM.YYYY
+	}
+
+	function formatNoteDate(dateString: string): { dayMonth: string; year: string } {
+		const date = new Date(dateString);
+		const day = String(date.getDate()).padStart(2, '0');
+		const month = String(date.getMonth() + 1).padStart(2, '0');
+		const year = String(date.getFullYear());
+		return {
+			dayMonth: `${day}.${month}`,
+			year: year
+		};
 	}
 
 	async function createPatient() {
@@ -407,6 +599,7 @@
 		await goto(page.url.pathname, { replaceState: true });
 		selectedPatient = null;
 		isEditMode = false;
+		notes = [];
 	}
 </script>
 
@@ -575,13 +768,13 @@
 				</div>
 			</div>
 
-			{#if newNoteActive}<Tabs.Root value="notes" class="w-full">
-					<Tabs.List>
-						<Tabs.Trigger value="info">Info</Tabs.Trigger>
-						<Tabs.Trigger value="notes">Notes</Tabs.Trigger>
-					</Tabs.List>
-					<Tabs.Content value="info"
-						><form use:editPatientEnhance class="space-y-4">
+			<Tabs.Root value="notes" class="w-full">
+				<Tabs.List>
+					<Tabs.Trigger value="info">Info</Tabs.Trigger>
+					<Tabs.Trigger value="notes">Notes</Tabs.Trigger>
+				</Tabs.List>
+				<Tabs.Content value="info"
+					><form use:editPatientEnhance class="space-y-4">
 							<!-- Patient Number (always disabled) -->
 							<div class="space-y-2">
 								<Label>Patient ID</Label>
@@ -799,38 +992,34 @@
 							{/if}
 						</form></Tabs.Content
 					>
-					<Tabs.Content value="notes"
-						><Card.Root class="w-full">
-							<Card.Content>
-								<form method="POST" class="w-full space-y-6" use:createNoteEnhance>
+				<Tabs.Content value="notes">
+					<div class="space-y-4">
+						<!-- Add New Note Card -->
+						<Card.Root class="w-full">
+							<Card.Content class="pt-6">
+								<form method="POST" use:createNoteEnhance>
 									<Form.Field form={createNoteForm} name="noteText">
 										<Form.Control>
 											{#snippet children({ props })}
-												<div class="flex flex-row">
-													<Form.Label
-														><div class="mr-4 flex flex-col items-center space-y-1">
-															<span>07.12</span>
-															<span>1990</span>
-														</div></Form.Label
-													>
+												<div class="flex flex-row items-start gap-4">
+													<div class="flex flex-col items-center space-y-1 pt-2">
+														<span class="text-sm font-medium">
+															{formatNoteDate(new Date().toISOString()).dayMonth}
+														</span>
+														<span class="text-xs text-muted-foreground">
+															{formatNoteDate(new Date().toISOString()).year}
+														</span>
+													</div>
 													<Textarea
 														{...props}
-														placeholder="Tell us a little bit about yourself"
-														class="resize-none"
+														placeholder="Add a new note..."
+														class="min-h-[100px] flex-1 resize-none"
 														bind:value={$createNoteFormData.noteText}
 													/>
-													<div class="ml-4 flex flex-col space-y-4">
-														<Form.Button
-															><SaveIcon
-																class="h-4 w-4 text-green-300 dark:text-green-600"
-															/></Form.Button
-														>
-
-														<Form.Button
-															><Trash2Icon
-																class="h-4 w-4 text-red-400 dark:text-red-700"
-															/></Form.Button
-														>
+													<div class="flex flex-col space-y-2">
+														<Button type="submit" size="icon" variant="ghost">
+															<SaveIcon class="h-4 w-4 text-green-600 dark:text-green-400" />
+														</Button>
 													</div>
 												</div>
 											{/snippet}
@@ -840,45 +1029,81 @@
 								</form>
 							</Card.Content>
 						</Card.Root>
-						<Card.Root class="w-full">
-							<Card.Content>
-								<form method="POST" class="w-full space-y-6" use:createNoteEnhance>
-									<Form.Field form={createNoteForm} name="noteText">
-										<Form.Control>
-											{#snippet children({ props })}
-												<Form.Label>07/12/1982</Form.Label>
-												<Textarea
-													{...props}
-													placeholder="Tell us a little bit about yourself"
-													class="resize-none"
-													bind:value={$createNoteFormData.noteText}
-												/>
-											{/snippet}
-										</Form.Control>
-										<Form.FieldErrors />
-									</Form.Field>
-									<div class="flex justify-between">
-										<Form.Button
-											><PencilIcon
-												class="h-4 w-4 text-green-300 dark:text-green-600"
-											/></Form.Button
-										>
 
-										<Form.Button
-											><Trash2Icon class="h-4 w-4 text-red-400 dark:text-red-700" /></Form.Button
-										>
-									</div>
-								</form>
-							</Card.Content>
-						</Card.Root></Tabs.Content
-					>
-				</Tabs.Root>
-			{:else}<div>
-					<Button onclick={() => (newNoteActive = true)}
-						><PlusIcon class="h-4 w-4" /> Add new</Button
-					>
-				</div>
-			{/if}
+						<!-- Older Notes -->
+						{#if isLoadingNotes}
+							<p class="text-muted-foreground text-center py-8">Loading notes...</p>
+						{:else if notes.length === 0}
+							<p class="text-muted-foreground text-center py-8">No notes yet. Add your first note above.</p>
+						{:else}
+							{#each notes as note (note.id)}
+								<Card.Root class="w-full">
+									<Card.Content class="pt-6">
+										<div class="flex flex-row items-start gap-4">
+											<div class="flex flex-col items-center space-y-1 pt-2">
+												<span class="text-sm font-medium">
+													{formatNoteDate(note.note_date).dayMonth}
+												</span>
+												<span class="text-xs text-muted-foreground">
+													{formatNoteDate(note.note_date).year}
+												</span>
+											</div>
+											<div class="flex-1">
+												{#if editingNoteId === note.id}
+													<Textarea
+														placeholder="Edit note..."
+														class="min-h-[100px] resize-none"
+														bind:value={editNoteText[note.id]}
+													/>
+												{:else}
+													<p class="whitespace-pre-wrap text-sm">{note.note_text}</p>
+												{/if}
+											</div>
+											<div class="flex flex-col space-y-2">
+												{#if editingNoteId === note.id}
+													<Button
+														type="button"
+														size="icon"
+														variant="ghost"
+														onclick={() => updateNote(note.id)}
+													>
+														<SaveIcon class="h-4 w-4 text-green-600 dark:text-green-400" />
+													</Button>
+													<Button
+														type="button"
+														size="icon"
+														variant="ghost"
+														onclick={() => cancelEditingNote(note.id)}
+													>
+														<XIcon class="h-4 w-4 text-gray-600 dark:text-gray-400" />
+													</Button>
+												{:else}
+													<Button
+														type="button"
+														size="icon"
+														variant="ghost"
+														onclick={() => startEditingNote(note)}
+													>
+														<PencilIcon class="h-4 w-4 text-blue-600 dark:text-blue-400" />
+													</Button>
+												{/if}
+												<Button
+													type="button"
+													size="icon"
+													variant="ghost"
+													onclick={() => deleteNote(note.id)}
+												>
+													<Trash2Icon class="h-4 w-4 text-red-600 dark:text-red-400" />
+												</Button>
+											</div>
+										</div>
+									</Card.Content>
+								</Card.Root>
+							{/each}
+						{/if}
+					</div>
+				</Tabs.Content>
+			</Tabs.Root>
 		{:else}
 			<p class="text-muted-foreground text-center">
 				Select a patient from the search results to view details
