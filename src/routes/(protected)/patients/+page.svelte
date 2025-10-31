@@ -25,6 +25,10 @@
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import { onMount } from 'svelte';
 
+	import PatientForm from '$lib/components/PatientForm.svelte';
+	import { patientService } from '$lib/services/patientService';
+	import type { Patient } from '$lib/types/patient.types';
+
 	// Create search schema
 	const searchSchema = z.object({
 		lastName: z.string().optional(),
@@ -100,28 +104,6 @@
 		console.log('hey');
 	}
 
-	// Patient type based on your Supabase schema
-	type Patient = {
-		id: string;
-		patient_number: number;
-		first_name: string;
-		last_name: string;
-		date_of_birth: string;
-		national_id: string | null;
-		gender: string | null;
-		phone_number: string | null;
-		email: string | null;
-		address: string | null;
-		postal_code: string | null;
-		occupation: string | null;
-		hobby: string | null;
-		created_at: string;
-		updated_at: string;
-		deleted_at: string | null;
-		deleted_by: string | null;
-		created_by: string;
-	};
-
 	let isEditMode = $state(false);
 	let isUpdating = $state(false);
 
@@ -135,8 +117,10 @@
 	let dialogOpen = $state(false);
 	let isCreating = $state(false);
 
+	let activeTab = $state('info');
+
 	//notes
-	let newNoteActive = $state(true);
+	let newNoteActive = $state(false);
 
 	// Load patient from URL on mount and when URL changes
 	onMount(() => {
@@ -161,7 +145,6 @@
 			return;
 		}
 
-		// Don't reload if already selected
 		if (selectedPatient?.id === patientId) {
 			return;
 		}
@@ -169,22 +152,20 @@
 		isLoadingPatient = true;
 
 		try {
-			const { data, error } = await supabase
-				.from('patients')
-				.select('*')
-				.eq('id', patientId)
-				.is('deleted_at', null)
-				.single();
+			const result = await patientService.getById(supabase, patientId);
 
-			if (error || !data) {
-				console.error('Error loading patient:', error);
-				// Patient not found, clear URL
-				await goto('', { replaceState: true });
-				selectedPatient = null;
+			if (result.success) {
+				if (result.data) {
+					selectedPatient = result.data;
+					$editPatientFormData = patientToFormData(result.data);
+					isEditMode = false;
+				} else {
+					await goto('', { replaceState: true });
+					selectedPatient = null;
+				}
 			} else {
-				selectedPatient = data;
-				$editPatientFormData = patientToFormData(data);
-				isEditMode = false;
+				alert(result.error);
+				selectedPatient = null;
 			}
 		} catch (err) {
 			console.error('Unexpected error loading patient:', err);
@@ -198,38 +179,21 @@
 		isSearching = true;
 
 		try {
-			let query = supabase.from('patients').select('*').is('deleted_at', null);
+			const filters = {
+				lastName: $searchFormData.lastName || undefined,
+				firstName: $searchFormData.firstName || undefined,
+				patientNumber: $searchFormData.patientId ? parseInt($searchFormData.patientId) : undefined,
+				dateOfBirth: $searchFormData.dateOfBirth || undefined,
+				phoneNumber: $searchFormData.phone || undefined
+			};
 
-			if ($searchFormData.patientId) {
-				query = query.eq('patient_number', parseInt($searchFormData.patientId));
-			}
+			const result = await patientService.search(supabase, filters);
 
-			if ($searchFormData.lastName) {
-				query = query.ilike('last_name', `%${$searchFormData.lastName}%`);
-			}
-
-			if ($searchFormData.firstName) {
-				query = query.ilike('first_name', `%${$searchFormData.firstName}%`);
-			}
-
-			if ($searchFormData.dateOfBirth) {
-				query = query.eq('date_of_birth', $searchFormData.dateOfBirth);
-			}
-
-			if ($searchFormData.phone) {
-				query = query.ilike('phone_number', `%${$searchFormData.phone}%`);
-			}
-
-			query = query.order('last_name', { ascending: true });
-
-			const { data, error } = await query;
-
-			if (error) {
-				console.error('Search error:', error);
-				alert('Error searching patients: ' + error.message);
-				searchResults = [];
+			if (result.success) {
+				searchResults = result.data;
 			} else {
-				searchResults = data || [];
+				alert(result.error);
+				searchResults = [];
 			}
 		} catch (err) {
 			console.error('Unexpected error:', err);
@@ -261,42 +225,29 @@
 		isCreating = true;
 
 		try {
-			const {
-				data: { user }
-			} = await supabase.auth.getUser();
+			const patientData = {
+				first_name: $createPatientFormData.firstName,
+				last_name: $createPatientFormData.lastName,
+				date_of_birth: $createPatientFormData.dateOfBirth,
+				national_id: $createPatientFormData.nationalId || null,
+				gender: $createPatientFormData.gender || null,
+				phone_number: $createPatientFormData.phoneNumber || null,
+				email: $createPatientFormData.email || null,
+				address: $createPatientFormData.address || null,
+				postal_code: $createPatientFormData.postalCode || null,
+				occupation: $createPatientFormData.occupation || null,
+				hobby: $createPatientFormData.hobby || null
+			};
 
-			if (!user) {
-				alert('You must be logged in to create a patient');
-				return;
-			}
+			const result = await patientService.create(supabase, patientData);
 
-			const { data, error } = await supabase
-				.from('patients')
-				.insert({
-					first_name: $createPatientFormData.firstName,
-					last_name: $createPatientFormData.lastName,
-					date_of_birth: $createPatientFormData.dateOfBirth,
-					national_id: $createPatientFormData.nationalId || null,
-					gender: $createPatientFormData.gender || null,
-					phone_number: $createPatientFormData.phoneNumber || null,
-					email: $createPatientFormData.email || null,
-					address: $createPatientFormData.address || null,
-					postal_code: $createPatientFormData.postalCode || null,
-					occupation: $createPatientFormData.occupation || null,
-					hobby: $createPatientFormData.hobby || null,
-					created_by: user.id
-				})
-				.select()
-				.single();
+			if (result.success) {
+				alert(`Patient created successfully! Patient #${result.data.patient_number}`);
+				selectedPatient = result.data;
+				$editPatientFormData = patientToFormData(result.data);
+				await goto(`?patientId=${result.data.id}`, { replaceState: true });
 
-			if (error) {
-				console.error('Error creating patient:', error);
-				alert('Error creating patient: ' + error.message);
-				return;
-			}
-
-			if (data) {
-				// Reset form
+				dialogOpen = false;
 				$createPatientFormData = {
 					firstName: '',
 					lastName: '',
@@ -310,12 +261,8 @@
 					occupation: '',
 					hobby: ''
 				};
-
-				dialogOpen = false;
-				alert('Patient created successfully!');
-
-				// Select the newly created patient by updating URL
-				await selectPatient(data);
+			} else {
+				alert(result.error);
 			}
 		} catch (err) {
 			console.error('Unexpected error:', err);
@@ -331,50 +278,68 @@
 		isUpdating = true;
 
 		try {
-			const {
-				data: { user }
-			} = await supabase.auth.getUser();
+			const patientData = {
+				first_name: $editPatientFormData.firstName,
+				last_name: $editPatientFormData.lastName,
+				date_of_birth: $editPatientFormData.dateOfBirth,
+				national_id: $editPatientFormData.nationalId || null,
+				gender: $editPatientFormData.gender || null,
+				phone_number: $editPatientFormData.phoneNumber || null,
+				email: $editPatientFormData.email || null,
+				address: $editPatientFormData.address || null,
+				postal_code: $editPatientFormData.postalCode || null,
+				occupation: $editPatientFormData.occupation || null,
+				hobby: $editPatientFormData.hobby || null
+			};
 
-			if (!user) {
-				alert('You must be logged in to update a patient');
-				return;
-			}
+			const result = await patientService.update(supabase, selectedPatient.id, patientData);
 
-			const { data, error } = await supabase
-				.from('patients')
-				.update({
-					first_name: $editPatientFormData.firstName,
-					last_name: $editPatientFormData.lastName,
-					date_of_birth: $editPatientFormData.dateOfBirth,
-					national_id: $editPatientFormData.nationalId || null,
-					gender: $editPatientFormData.gender || null,
-					phone_number: $editPatientFormData.phoneNumber || null,
-					email: $editPatientFormData.email || null,
-					address: $editPatientFormData.address || null,
-					postal_code: $editPatientFormData.postalCode || null,
-					occupation: $editPatientFormData.occupation || null,
-					hobby: $editPatientFormData.hobby || null
-				})
-				.eq('id', selectedPatient.id)
-				.select()
-				.single();
-
-			if (error) {
-				console.error('Error updating patient:', error);
-				alert('Error updating patient: ' + error.message);
-				return;
-			}
-
-			if (data) {
-				selectedPatient = data;
-				isEditMode = false;
+			if (result.success) {
 				alert('Patient updated successfully!');
+				selectedPatient = result.data;
+				$editPatientFormData = patientToFormData(result.data);
+				isEditMode = false;
+
+				const index = searchResults.findIndex((p) => p.id === result.data.id);
+				if (index !== -1) {
+					searchResults[index] = result.data;
+				}
+			} else {
+				alert(result.error);
 			}
 		} catch (err) {
 			console.error('Unexpected error:', err);
 			alert('An unexpected error occurred');
 		} finally {
 			isUpdating = false;
+		}
+	}
+
+	async function deletePatient() {
+		if (!selectedPatient) return;
+
+		if (
+			!confirm(
+				`Are you sure you want to delete ${selectedPatient.first_name} ${selectedPatient.last_name}?`
+			)
+		) {
+			return;
+		}
+
+		try {
+			const result = await patientService.softDelete(supabase, selectedPatient.id);
+
+			if (result.success) {
+				alert('Patient deleted successfully');
+				await goto('', { replaceState: true });
+				selectedPatient = null;
+				searchResults = searchResults.filter((p) => p.id !== result.data.id);
+			} else {
+				alert(result.error);
+			}
+		} catch (err) {
+			console.error('Unexpected error:', err);
+			alert('An unexpected error occurred');
 		}
 	}
 
@@ -411,8 +376,10 @@
 </script>
 
 <!-- search -->
-<div class="mx-auto flex min-h-screen w-full max-w-[1920px] border-x-2 border-black">
-	<div class="flex w-3/5 flex-col border-r-2 border-black">
+<div
+	class="mx-auto min-h-screen w-full max-w-[1920px] flex-col border-black sm:flex sm:border-x-2 dark:border-slate-600"
+>
+	<div class="flex w-full flex-col border-black sm:w-3/5 sm:border-r-2 dark:border-slate-600">
 		<div class="space-y-4 p-6">
 			<div class="flex items-center justify-between">
 				<h2 class="text-2xl font-bold">Search Patients</h2>
@@ -505,7 +472,7 @@
 		</div>
 
 		<!-- Results Table -->
-		<div class="flex-1 overflow-auto border-t-2 border-black p-6">
+		<div class="flex-1 overflow-auto border-t-2 border-black p-6 dark:border-slate-600">
 			{#if searchResults.length > 0}
 				<div class="rounded-md border">
 					<Table.Root>
@@ -552,7 +519,7 @@
 	</div>
 	<!-- patient info -->
 
-	<div class="w-2/5 p-6">
+	<div class="w-full border-t-2 border-black p-6 sm:w-2/5 sm:border-none dark:border-slate-600">
 		{#if isLoadingPatient}
 			<div class="flex items-center justify-center py-12">
 				<p class="text-muted-foreground">Loading patient...</p>
@@ -562,7 +529,12 @@
 				<h2 class="text-2xl font-bold">Patient Info</h2>
 
 				<div class="flex gap-2">
-					{#if !isEditMode}
+					{#if activeTab === 'notes'}
+						<Button onclick={() => (newNoteActive = true)}
+							><PlusIcon class="h-4 w-4" /> Add new</Button
+						>
+					{/if}
+					{#if !isEditMode && activeTab === 'info'}
 						<Button
 							onclick={() => {
 								isEditMode = true;
@@ -571,214 +543,25 @@
 							Edit
 						</Button>
 					{/if}
-					<Button variant="outline" size="sm" onclick={deselectPatient}>Deselect</Button>
+					<Button variant="outline" onclick={deselectPatient}>Deselect</Button>
 				</div>
 			</div>
 
-			{#if newNoteActive}<Tabs.Root value="notes" class="w-full">
-					<Tabs.List>
-						<Tabs.Trigger value="info">Info</Tabs.Trigger>
-						<Tabs.Trigger value="notes">Notes</Tabs.Trigger>
-					</Tabs.List>
-					<Tabs.Content value="info"
-						><form use:editPatientEnhance class="space-y-4">
-							<!-- Patient Number (always disabled) -->
-							<div class="space-y-2">
-								<Label>Patient ID</Label>
-								<Input disabled value={selectedPatient.patient_number} />
-							</div>
-
-							<!-- First Name & Last Name -->
-							<div class="grid grid-cols-2 gap-4">
-								<Form.Field form={editPatientForm} name="firstName">
-									<Form.Control>
-										{#snippet children({ props })}
-											<Form.Label>First Name</Form.Label>
-											<Input
-												{...props}
-												bind:value={$editPatientFormData.firstName}
-												disabled={!isEditMode}
-											/>
-										{/snippet}
-									</Form.Control>
-									<Form.FieldErrors />
-								</Form.Field>
-
-								<Form.Field form={editPatientForm} name="lastName">
-									<Form.Control>
-										{#snippet children({ props })}
-											<Form.Label>Last Name</Form.Label>
-											<Input
-												{...props}
-												bind:value={$editPatientFormData.lastName}
-												disabled={!isEditMode}
-											/>
-										{/snippet}
-									</Form.Control>
-									<Form.FieldErrors />
-								</Form.Field>
-							</div>
-
-							<!-- Date of Birth -->
-							<Form.Field form={editPatientForm} name="dateOfBirth">
-								<Form.Control>
-									{#snippet children({ props })}
-										<Form.Label>Date of Birth</Form.Label>
-										<Input
-											{...props}
-											type="date"
-											bind:value={$editPatientFormData.dateOfBirth}
-											disabled={!isEditMode}
-										/>
-									{/snippet}
-								</Form.Control>
-								<Form.FieldErrors />
-							</Form.Field>
-
-							<!-- National ID -->
-							<Form.Field form={editPatientForm} name="nationalId">
-								<Form.Control>
-									{#snippet children({ props })}
-										<Form.Label>National ID</Form.Label>
-										<Input
-											{...props}
-											bind:value={$editPatientFormData.nationalId}
-											disabled={!isEditMode}
-											placeholder="N/A"
-										/>
-									{/snippet}
-								</Form.Control>
-								<Form.FieldErrors />
-							</Form.Field>
-
-							<!-- Gender -->
-							<Form.Field form={editPatientForm} name="gender">
-								<Form.Control>
-									{#snippet children({ props })}
-										<Form.Label>Gender</Form.Label>
-										<Select.Root
-											type="single"
-											bind:value={$editPatientFormData.gender}
-											name={props.name}
-											disabled={!isEditMode}
-										>
-											<Select.Trigger {...props}>
-												{$editPatientFormData.gender
-													? $editPatientFormData.gender.charAt(0).toUpperCase() +
-														$editPatientFormData.gender.slice(1)
-													: 'Select gender'}
-											</Select.Trigger>
-											<Select.Content>
-												<Select.Item value="male" label="Male" />
-												<Select.Item value="female" label="Female" />
-												<Select.Item value="other" label="Other" />
-											</Select.Content>
-										</Select.Root>
-									{/snippet}
-								</Form.Control>
-								<Form.FieldErrors />
-							</Form.Field>
-
-							<!-- Phone Number -->
-							<Form.Field form={editPatientForm} name="phoneNumber">
-								<Form.Control>
-									{#snippet children({ props })}
-										<Form.Label>Phone Number</Form.Label>
-										<Input
-											{...props}
-											type="tel"
-											bind:value={$editPatientFormData.phoneNumber}
-											disabled={!isEditMode}
-											placeholder="N/A"
-										/>
-									{/snippet}
-								</Form.Control>
-								<Form.FieldErrors />
-							</Form.Field>
-
-							<!-- Email -->
-							<Form.Field form={editPatientForm} name="email">
-								<Form.Control>
-									{#snippet children({ props })}
-										<Form.Label>Email</Form.Label>
-										<Input
-											{...props}
-											type="email"
-											bind:value={$editPatientFormData.email}
-											disabled={!isEditMode}
-											placeholder="N/A"
-										/>
-									{/snippet}
-								</Form.Control>
-								<Form.FieldErrors />
-							</Form.Field>
-
-							<!-- Address -->
-							<Form.Field form={editPatientForm} name="address">
-								<Form.Control>
-									{#snippet children({ props })}
-										<Form.Label>Address</Form.Label>
-										<Input
-											{...props}
-											bind:value={$editPatientFormData.address}
-											disabled={!isEditMode}
-											placeholder="N/A"
-										/>
-									{/snippet}
-								</Form.Control>
-								<Form.FieldErrors />
-							</Form.Field>
-
-							<!-- Postal Code -->
-							<Form.Field form={editPatientForm} name="postalCode">
-								<Form.Control>
-									{#snippet children({ props })}
-										<Form.Label>Postal Code</Form.Label>
-										<Input
-											{...props}
-											bind:value={$editPatientFormData.postalCode}
-											disabled={!isEditMode}
-											placeholder="N/A"
-										/>
-									{/snippet}
-								</Form.Control>
-								<Form.FieldErrors />
-							</Form.Field>
-
-							<!-- Occupation -->
-							<Form.Field form={editPatientForm} name="occupation">
-								<Form.Control>
-									{#snippet children({ props })}
-										<Form.Label>Occupation</Form.Label>
-										<Input
-											{...props}
-											bind:value={$editPatientFormData.occupation}
-											disabled={!isEditMode}
-											placeholder="N/A"
-										/>
-									{/snippet}
-								</Form.Control>
-								<Form.FieldErrors />
-							</Form.Field>
-
-							<!-- Hobby -->
-							<Form.Field form={editPatientForm} name="hobby">
-								<Form.Control>
-									{#snippet children({ props })}
-										<Form.Label>Hobby</Form.Label>
-										<Input
-											{...props}
-											bind:value={$editPatientFormData.hobby}
-											disabled={!isEditMode}
-											placeholder="N/A"
-										/>
-									{/snippet}
-								</Form.Control>
-								<Form.FieldErrors />
-							</Form.Field>
-
-							<!-- Action Buttons (only show in edit mode) -->
-							{#if isEditMode}
+			<Tabs.Root bind:value={activeTab} class="w-full">
+				<Tabs.List>
+					<Tabs.Trigger value="info">Info</Tabs.Trigger>
+					<Tabs.Trigger value="notes">Notes</Tabs.Trigger>
+				</Tabs.List>
+				<Tabs.Content value="info"
+					><!-- Option A: Custom footer in edit mode -->
+					{#if isEditMode}
+						<PatientForm
+							form={editPatientForm}
+							enhance={editPatientEnhance}
+							isSubmitting={isUpdating}
+							mode="edit"
+						>
+							{#snippet footer()}
 								<div class="flex gap-2">
 									<Button type="submit" disabled={isUpdating}>
 										{isUpdating ? 'Saving...' : 'Save Changes'}
@@ -796,13 +579,23 @@
 										Cancel
 									</Button>
 								</div>
-							{/if}
-						</form></Tabs.Content
-					>
-					<Tabs.Content value="notes"
-						><Card.Root class="w-full">
+							{/snippet}
+						</PatientForm>
+					{:else}
+						<!-- View mode - PatientForm with disabled=true and no footer -->
+						<PatientForm
+							form={editPatientForm}
+							enhance={editPatientEnhance}
+							isSubmitting={false}
+							mode="edit"
+							disabled={true}
+						/>
+					{/if}</Tabs.Content
+				>
+				<Tabs.Content value="notes"
+					>{#if newNoteActive}<Card.Root class="w-full">
 							<Card.Content>
-								<form method="POST" class="w-full space-y-6" use:createNoteEnhance>
+								<form class="w-full space-y-6" use:createNoteEnhance>
 									<Form.Field form={createNoteForm} name="noteText">
 										<Form.Control>
 											{#snippet children({ props })}
@@ -839,46 +632,38 @@
 									</Form.Field>
 								</form>
 							</Card.Content>
-						</Card.Root>
-						<Card.Root class="w-full">
-							<Card.Content>
-								<form method="POST" class="w-full space-y-6" use:createNoteEnhance>
-									<Form.Field form={createNoteForm} name="noteText">
-										<Form.Control>
-											{#snippet children({ props })}
-												<Form.Label>07/12/1982</Form.Label>
-												<Textarea
-													{...props}
-													placeholder="Tell us a little bit about yourself"
-													class="resize-none"
-													bind:value={$createNoteFormData.noteText}
-												/>
-											{/snippet}
-										</Form.Control>
-										<Form.FieldErrors />
-									</Form.Field>
-									<div class="flex justify-between">
-										<Form.Button
-											><PencilIcon
-												class="h-4 w-4 text-green-300 dark:text-green-600"
-											/></Form.Button
-										>
+						</Card.Root>{/if}
+					<Card.Root class="w-full">
+						<Card.Content>
+							<form class="w-full space-y-6" use:createNoteEnhance>
+								<Form.Field form={createNoteForm} name="noteText">
+									<Form.Control>
+										{#snippet children({ props })}
+											<Form.Label>07/12/1982</Form.Label>
+											<Textarea
+												{...props}
+												placeholder="Tell us a little bit about yourself"
+												class="resize-none"
+												bind:value={$createNoteFormData.noteText}
+											/>
+										{/snippet}
+									</Form.Control>
+									<Form.FieldErrors />
+								</Form.Field>
+								<div class="flex justify-between">
+									<Form.Button
+										><PencilIcon class="h-4 w-4 text-green-300 dark:text-green-600" /></Form.Button
+									>
 
-										<Form.Button
-											><Trash2Icon class="h-4 w-4 text-red-400 dark:text-red-700" /></Form.Button
-										>
-									</div>
-								</form>
-							</Card.Content>
-						</Card.Root></Tabs.Content
-					>
-				</Tabs.Root>
-			{:else}<div>
-					<Button onclick={() => (newNoteActive = true)}
-						><PlusIcon class="h-4 w-4" /> Add new</Button
-					>
-				</div>
-			{/if}
+									<Form.Button
+										><Trash2Icon class="h-4 w-4 text-red-400 dark:text-red-700" /></Form.Button
+									>
+								</div>
+							</form>
+						</Card.Content>
+					</Card.Root></Tabs.Content
+				>
+			</Tabs.Root>
 		{:else}
 			<p class="text-muted-foreground text-center">
 				Select a patient from the search results to view details
@@ -886,11 +671,7 @@
 		{/if}
 	</div>
 </div>
-<!--   import SaveIcon from '@lucide/svelte/icons/save';
-  import PencilIcon from '@lucide/svelte/icons/pencil';
-  import Trash2Icon from '@lucide/svelte/icons/trash-2';
-  import PlusIcon from '@lucide/svelte/icons/plus';
-  import XIcon from '@lucide/svelte/icons/x'; -->
+
 <Dialog.Root bind:open={dialogOpen}>
 	<Dialog.Content class="max-h-[90vh] max-w-2xl overflow-y-auto">
 		<Dialog.Header>
@@ -900,202 +681,41 @@
 			</Dialog.Description>
 		</Dialog.Header>
 
-		<form use:createPatientEnhance class="space-y-4">
-			<!-- Required Fields -->
-			<div class="grid grid-cols-2 gap-4">
-				<Form.Field form={createPatientForm} name="firstName">
-					<Form.Control>
-						{#snippet children({ props })}
-							<Form.Label>First Name *</Form.Label>
-							<Input
-								{...props}
-								bind:value={$createPatientFormData.firstName}
-								placeholder="Enter first name"
-							/>
-						{/snippet}
-					</Form.Control>
-					<Form.FieldErrors />
-				</Form.Field>
-
-				<Form.Field form={createPatientForm} name="lastName">
-					<Form.Control>
-						{#snippet children({ props })}
-							<Form.Label>Last Name *</Form.Label>
-							<Input
-								{...props}
-								bind:value={$createPatientFormData.lastName}
-								placeholder="Enter last name"
-							/>
-						{/snippet}
-					</Form.Control>
-					<Form.FieldErrors />
-				</Form.Field>
-			</div>
-
-			<Form.Field form={createPatientForm} name="dateOfBirth">
-				<Form.Control>
-					{#snippet children({ props })}
-						<Form.Label>Date of Birth *</Form.Label>
-						<Input {...props} type="date" bind:value={$createPatientFormData.dateOfBirth} />
-					{/snippet}
-				</Form.Control>
-				<Form.FieldErrors />
-			</Form.Field>
-
-			<!-- Optional Fields -->
-			<Form.Field form={createPatientForm} name="nationalId">
-				<Form.Control>
-					{#snippet children({ props })}
-						<Form.Label>National ID</Form.Label>
-						<Input
-							{...props}
-							bind:value={$createPatientFormData.nationalId}
-							placeholder="Enter national ID"
-						/>
-					{/snippet}
-				</Form.Control>
-				<Form.FieldErrors />
-			</Form.Field>
-
-			<Form.Field form={createPatientForm} name="gender">
-				<Form.Control>
-					{#snippet children({ props })}
-						<Form.Label>Gender</Form.Label>
-						<Select.Root type="single" bind:value={$createPatientFormData.gender} name={props.name}>
-							<Select.Trigger {...props}>
-								{$createPatientFormData.gender
-									? $createPatientFormData.gender.charAt(0).toUpperCase() +
-										$createPatientFormData.gender.slice(1)
-									: 'Select gender'}
-							</Select.Trigger>
-							<Select.Content>
-								<Select.Item value="male" label="Male" />
-								<Select.Item value="female" label="Female" />
-								<Select.Item value="other" label="Other" />
-							</Select.Content>
-						</Select.Root>
-					{/snippet}
-				</Form.Control>
-				<Form.FieldErrors />
-			</Form.Field>
-
-			<div class="grid grid-cols-2 gap-4">
-				<Form.Field form={createPatientForm} name="phoneNumber">
-					<Form.Control>
-						{#snippet children({ props })}
-							<Form.Label>Phone Number</Form.Label>
-							<Input
-								{...props}
-								type="tel"
-								bind:value={$createPatientFormData.phoneNumber}
-								placeholder="Enter phone number"
-							/>
-						{/snippet}
-					</Form.Control>
-					<Form.FieldErrors />
-				</Form.Field>
-
-				<Form.Field form={createPatientForm} name="email">
-					<Form.Control>
-						{#snippet children({ props })}
-							<Form.Label>Email</Form.Label>
-							<Input
-								{...props}
-								type="email"
-								bind:value={$createPatientFormData.email}
-								placeholder="Enter email"
-							/>
-						{/snippet}
-					</Form.Control>
-					<Form.FieldErrors />
-				</Form.Field>
-			</div>
-
-			<Form.Field form={createPatientForm} name="address">
-				<Form.Control>
-					{#snippet children({ props })}
-						<Form.Label>Address</Form.Label>
-						<Input
-							{...props}
-							bind:value={$createPatientFormData.address}
-							placeholder="Enter address"
-						/>
-					{/snippet}
-				</Form.Control>
-				<Form.FieldErrors />
-			</Form.Field>
-
-			<Form.Field form={createPatientForm} name="postalCode">
-				<Form.Control>
-					{#snippet children({ props })}
-						<Form.Label>Postal Code</Form.Label>
-						<Input
-							{...props}
-							bind:value={$createPatientFormData.postalCode}
-							placeholder="Enter postal code"
-						/>
-					{/snippet}
-				</Form.Control>
-				<Form.FieldErrors />
-			</Form.Field>
-
-			<div class="grid grid-cols-2 gap-4">
-				<Form.Field form={createPatientForm} name="occupation">
-					<Form.Control>
-						{#snippet children({ props })}
-							<Form.Label>Occupation</Form.Label>
-							<Input
-								{...props}
-								bind:value={$createPatientFormData.occupation}
-								placeholder="Enter occupation"
-							/>
-						{/snippet}
-					</Form.Control>
-					<Form.FieldErrors />
-				</Form.Field>
-
-				<Form.Field form={createPatientForm} name="hobby">
-					<Form.Control>
-						{#snippet children({ props })}
-							<Form.Label>Hobby</Form.Label>
-							<Input
-								{...props}
-								bind:value={$createPatientFormData.hobby}
-								placeholder="Enter hobby"
-							/>
-						{/snippet}
-					</Form.Control>
-					<Form.FieldErrors />
-				</Form.Field>
-			</div>
-
-			<Dialog.Footer>
-				<Button
-					type="button"
-					variant="outline"
-					onclick={() => {
-						$createPatientFormData = {
-							firstName: '',
-							lastName: '',
-							dateOfBirth: '',
-							nationalId: '',
-							gender: '',
-							phoneNumber: '',
-							email: '',
-							address: '',
-							postalCode: '',
-							occupation: '',
-							hobby: ''
-						};
-						dialogOpen = false;
-					}}
-				>
-					Cancel
-				</Button>
-				<Button type="submit" disabled={isCreating}>
-					{isCreating ? 'Creating...' : 'Create Patient'}
-				</Button>
-			</Dialog.Footer>
-		</form>
+		<PatientForm
+			form={createPatientForm}
+			enhance={createPatientEnhance}
+			isSubmitting={isCreating}
+			mode="create"
+		>
+			{#snippet footer()}
+				<Dialog.Footer>
+					<Button
+						type="button"
+						variant="outline"
+						onclick={() => {
+							$createPatientFormData = {
+								firstName: '',
+								lastName: '',
+								dateOfBirth: '',
+								nationalId: '',
+								gender: '',
+								phoneNumber: '',
+								email: '',
+								address: '',
+								postalCode: '',
+								occupation: '',
+								hobby: ''
+							};
+							dialogOpen = false;
+						}}
+					>
+						Cancel
+					</Button>
+					<Button type="submit" disabled={isCreating}>
+						{isCreating ? 'Creating...' : 'Create Patient'}
+					</Button>
+				</Dialog.Footer>
+			{/snippet}
+		</PatientForm>
 	</Dialog.Content>
 </Dialog.Root>

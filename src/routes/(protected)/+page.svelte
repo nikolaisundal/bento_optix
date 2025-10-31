@@ -7,9 +7,9 @@
 </script>
 
 <div
-	class=" mx-auto flex min-h-screen w-full max-w-[1920px] flex-col items-center border-x-2 border-black"
+	class=" mx-auto flex min-h-screen w-full max-w-[1920px] flex-col items-center border-black sm:border-x-2"
 >
-	<div class="mt-20 w-[700px]" in:fade={{ duration: 1500, delay: 200 }}>
+	<div class="mt-20 w-[300px] sm:w-[700px]" in:fade={{ duration: 1500, delay: 200 }}>
 		<img
 			src={bentoLogo}
 			alt="bento optix logo. the two 'o' in the logo form a pair of spectacles in the middle"
@@ -17,7 +17,7 @@
 		/>
 	</div>
 	<video
-		class="mt-20 rounded-full border-black"
+		class="sm:v-[400px] v-[250px] mt-20 h-[250px] rounded-full border-black sm:h-[400px]"
 		src={autorefBalloon}
 		aria-label="A hot air ballon at the end of a raod. NIDEK is going to sue me"
 		autoplay
@@ -28,14 +28,14 @@
 	>
 		<track kind="captions" />
 	</video>
-	<div class="mt-28 mb-8 flex items-center space-x-2">
+	<div class="mt-28 mb-8 flex flex-col items-center space-y-2">
 		<span class="text-xl text-gray-600">
 			Logged in as: {data.user?.email}
 		</span>
 
 		{#if data.avatarUrl}
 			<div></div>
-			<img src={data.avatarUrl} alt="User avatar" class="h-8 w-8 rounded-full object-cover" />
+			<img src={data.avatarUrl} alt="User avatar" class="h-10 w-10 rounded-full object-cover" />
 		{/if}
 	</div>
 </div>

@@ -18,10 +18,10 @@
 </script>
 
 <div class="min-h-screen w-full">
-	<nav class="flex w-full items-center bg-gray-50 dark:bg-gray-900">
+	<nav class="flex w-full items-center bg-gray-50 p-2 dark:bg-gray-900">
 		<DropdownMenu.Root>
 			<DropdownMenu.Trigger
-				class="ml-2 h-10 w-10 cursor-pointer rounded-md bg-slate-200 p-1 hover:bg-slate-300 data-[state=open]:bg-slate-300 "
+				class=" h-10 w-10 cursor-pointer rounded-md bg-slate-200 p-1 hover:bg-slate-300 data-[state=open]:bg-slate-300 "
 			>
 				<img src={hamburgerIcon} alt="Menu" class="cursor-pointer" />
 			</DropdownMenu.Trigger>
@@ -40,7 +40,7 @@
 			</DropdownMenu.Content>
 		</DropdownMenu.Root>
 
-		<div class="flex w-full items-center justify-end">
+		<div class=" flex w-full items-center justify-end">
 			<Button onclick={toggleMode} variant="outline" size="icon">
 				<SunIcon
 					class="h-[1.2rem] w-[1.2rem] scale-100 rotate-0 !transition-all dark:scale-0 dark:-rotate-90"
@@ -50,9 +50,6 @@
 				/>
 				<span class="sr-only">Toggle theme</span>
 			</Button>
-			<p class="p-4 text-gray-600">
-				Logged in as: {data.user?.email}
-			</p>
 		</div>
 	</nav>
 
