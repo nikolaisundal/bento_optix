@@ -29,6 +29,11 @@
 	import { patientService } from '$lib/services/patientService';
 	import type { Patient } from '$lib/types/patient.types';
 
+	import NotesCard from '@/components/NotesCard.svelte';
+
+	import { noteService } from '$lib/services/noteService';
+	import type { Note } from '$lib/services/noteService';
+
 	// Create search schema
 	const searchSchema = z.object({
 		lastName: z.string().optional(),
@@ -66,6 +71,7 @@
 
 	// CREATE patient form (for dialog)
 	const createPatientForm = superForm(defaults(zod4(patientSchema)), {
+		id: 'create-patient-form',
 		validators: zod4(patientSchema),
 		SPA: true,
 		onSubmit: async () => {
@@ -77,6 +83,7 @@
 
 	// EDIT patient form (for right panel)
 	const editPatientForm = superForm(defaults(zod4(patientSchema)), {
+		id: 'edit-patient-form',
 		validators: zod4(patientSchema),
 		SPA: true,
 		onSubmit: async () => {
@@ -91,21 +98,42 @@
 		noteDate: z.string().min(1, 'Date is required')
 	});
 
+	// Complete the createNoteForm setup
 	const createNoteForm = superForm(defaults(zod4(noteSchema)), {
+		id: 'create-note-form',
 		validators: zod4(noteSchema),
 		SPA: true,
 		onSubmit: async () => {
 			await createNote();
 		}
 	});
+
 	const { form: createNoteFormData, enhance: createNoteEnhance } = createNoteForm;
 
-	async function createNote() {
-		console.log('hey');
-	}
+	// editNoteForm is already correct, just add the missing const destructuring
 
-	let isEditMode = $state(false);
-	let isUpdating = $state(false);
+	// One form for editing notes (shared by all note cards)
+	const editNoteForm = superForm(defaults(zod4(noteSchema)), {
+		id: 'edit-note-form',
+		validators: zod4(noteSchema),
+		SPA: true,
+		onSubmit: async () => {
+			await updateNote();
+		}
+	});
+
+	const { form: editNoteFormData, enhance: editNoteEnhance } = editNoteForm;
+
+	function startEditingNote(note: Note) {
+		if (isAnyEditActive) {
+			alert('Please save or cancel current changes first');
+			return;
+		}
+		editingNoteId = note.id;
+		// Populate the form with the note's data
+		$editNoteFormData.noteText = note.note_text;
+		$editNoteFormData.noteDate = note.note_date;
+	}
 
 	// Search results state
 	let searchResults = $state<Patient[]>([]);
@@ -117,10 +145,125 @@
 	let dialogOpen = $state(false);
 	let isCreating = $state(false);
 
-	let activeTab = $state('info');
+	//Info
+	let activeTab = $state('notes');
+	let isEditMode = $state(false);
+	let isUpdating = $state(false);
 
 	//notes
 	let newNoteActive = $state(false);
+	let editingNoteId = $state<string | null>(null);
+	let notes = $state<Note[]>([]);
+	let isLoadingNotes = $state(false);
+	let isUpdatingNote = $state(false);
+	let isCreatingNote = $state(false);
+
+	const isAnyEditActive = $derived(isEditMode || newNoteActive || editingNoteId !== null);
+
+	// Load notes when patient is selected
+	async function loadNotes(patientId: string) {
+		isLoadingNotes = true;
+		try {
+			const result = await noteService.getByPatientId(supabase, patientId);
+			if (result.success) {
+				notes = result.data || [];
+			} else {
+				alert(result.error);
+				notes = [];
+			}
+		} catch (err) {
+			console.error('Error loading notes:', err);
+			notes = [];
+		} finally {
+			isLoadingNotes = false;
+		}
+	}
+	$effect(() => {
+		console.log('noteText:', $createNoteFormData.noteText);
+	});
+	// Create new note
+	async function createNote() {
+		if (!selectedPatient) return;
+
+		isCreatingNote = true;
+		try {
+			const noteData = {
+				patient_id: selectedPatient.id,
+				note_text: $createNoteFormData.noteText,
+				note_date: new Date().toISOString() // Auto-generate current date
+			};
+
+			const result = await noteService.create(supabase, noteData);
+
+			if (result.success && result.data) {
+				notes = [result.data, ...notes]; // Add to top
+				newNoteActive = false;
+				$createNoteFormData.noteText = '';
+			} else {
+				alert(result.error);
+			}
+		} catch (err) {
+			console.error('Error creating note:', err);
+			alert('An unexpected error occurred');
+		} finally {
+			isCreatingNote = false;
+		}
+	}
+
+	// Update note
+	async function updateNote() {
+		if (!editingNoteId) return;
+
+		isUpdatingNote = true;
+		try {
+			const noteData = {
+				note_text: $editNoteFormData.noteText
+			};
+
+			const result = await noteService.update(supabase, editingNoteId, noteData);
+
+			if (result.success) {
+				const index = notes.findIndex((n) => n.id === editingNoteId);
+				if (index !== -1 && result.data) {
+					notes[index] = result.data;
+				}
+				editingNoteId = null;
+			} else {
+				alert(result.error);
+			}
+		} catch (err) {
+			console.error('Error updating note:', err);
+			alert('An unexpected error occurred');
+		} finally {
+			isUpdatingNote = false;
+		}
+	}
+
+	// Cancel editing
+	function cancelEditingNote() {
+		editingNoteId = null;
+		$editNoteFormData.noteText = '';
+	}
+
+	// Delete note
+	async function deleteNote(noteId: string) {
+		if (!confirm('Are you sure you want to delete this note?')) {
+			return;
+		}
+
+		try {
+			const result = await noteService.softDelete(supabase, noteId);
+
+			if (result.success) {
+				notes = notes.filter((n) => n.id !== noteId);
+			} else {
+				alert(result.error);
+			}
+		} catch (err) {
+			console.error('Error deleting note:', err);
+			alert('An unexpected error occurred');
+		}
+	}
 
 	// Load patient from URL on mount and when URL changes
 	onMount(() => {
@@ -142,6 +285,7 @@
 
 		if (!patientId) {
 			selectedPatient = null;
+			notes = []; // Clear notes
 			return;
 		}
 
@@ -159,17 +303,23 @@
 					selectedPatient = result.data;
 					$editPatientFormData = patientToFormData(result.data);
 					isEditMode = false;
+
+					// Load notes for this patient
+					await loadNotes(patientId);
 				} else {
 					await goto('', { replaceState: true });
 					selectedPatient = null;
+					notes = [];
 				}
 			} else {
 				alert(result.error);
 				selectedPatient = null;
+				notes = [];
 			}
 		} catch (err) {
 			console.error('Unexpected error loading patient:', err);
 			selectedPatient = null;
+			notes = [];
 		} finally {
 			isLoadingPatient = false;
 		}
@@ -377,7 +527,7 @@
 
 <!-- search -->
 <div
-	class="mx-auto min-h-screen w-full max-w-[1920px] flex-col border-black sm:flex sm:border-x-2 dark:border-slate-600"
+	class="mx-auto flex min-h-screen w-full max-w-[1920px] flex-col border-black sm:flex-row sm:border-x-2 dark:border-slate-600"
 >
 	<div class="flex w-full flex-col border-black sm:w-3/5 sm:border-r-2 dark:border-slate-600">
 		<div class="space-y-4 p-6">
@@ -592,38 +742,42 @@
 						/>
 					{/if}</Tabs.Content
 				>
-				<Tabs.Content value="notes"
-					>{#if newNoteActive}<Card.Root class="w-full">
-							<Card.Content>
-								<form class="w-full space-y-6" use:createNoteEnhance>
+				<Tabs.Content value="notes">
+					{#if newNoteActive}<Card.Root class="w-full">
+							<Card.Content class="pt-6">
+								<form class="space-y-4" use:createNoteEnhance>
 									<Form.Field form={createNoteForm} name="noteText">
 										<Form.Control>
 											{#snippet children({ props })}
-												<div class="flex flex-row">
-													<Form.Label
-														><div class="mr-4 flex flex-col items-center space-y-1">
-															<span>07.12</span>
-															<span>1990</span>
-														</div></Form.Label
-													>
+												<div class="flex items-start gap-4">
+													<div class="text-muted-foreground min-w-[80px] text-sm">Today</div>
 													<Textarea
 														{...props}
-														placeholder="Tell us a little bit about yourself"
-														class="resize-none"
 														bind:value={$createNoteFormData.noteText}
+														placeholder="Enter note text..."
+														class="flex-1 resize-none"
+														rows={4}
 													/>
-													<div class="ml-4 flex flex-col space-y-4">
-														<Form.Button
-															><SaveIcon
-																class="h-4 w-4 text-green-300 dark:text-green-600"
-															/></Form.Button
+													<div class="flex flex-col gap-2">
+														<Button
+															type="submit"
+															size="icon"
+															variant="ghost"
+															disabled={isUpdatingNote}
+															title="Save"
 														>
-
-														<Form.Button
-															><Trash2Icon
-																class="h-4 w-4 text-red-400 dark:text-red-700"
-															/></Form.Button
+															<SaveIcon class="h-4 w-4 text-green-600 dark:text-green-400" />
+														</Button>
+														<Button
+															type="button"
+															size="icon"
+															variant="ghost"
+															onclick={cancelEditingNote}
+															disabled={isUpdatingNote}
+															title="Cancel"
 														>
+															<XIcon class="h-4 w-4" />
+														</Button>
 													</div>
 												</div>
 											{/snippet}
@@ -633,36 +787,19 @@
 								</form>
 							</Card.Content>
 						</Card.Root>{/if}
-					<Card.Root class="w-full">
-						<Card.Content>
-							<form class="w-full space-y-6" use:createNoteEnhance>
-								<Form.Field form={createNoteForm} name="noteText">
-									<Form.Control>
-										{#snippet children({ props })}
-											<Form.Label>07/12/1982</Form.Label>
-											<Textarea
-												{...props}
-												placeholder="Tell us a little bit about yourself"
-												class="resize-none"
-												bind:value={$createNoteFormData.noteText}
-											/>
-										{/snippet}
-									</Form.Control>
-									<Form.FieldErrors />
-								</Form.Field>
-								<div class="flex justify-between">
-									<Form.Button
-										><PencilIcon class="h-4 w-4 text-green-300 dark:text-green-600" /></Form.Button
-									>
-
-									<Form.Button
-										><Trash2Icon class="h-4 w-4 text-red-400 dark:text-red-700" /></Form.Button
-									>
-								</div>
-							</form>
-						</Card.Content>
-					</Card.Root></Tabs.Content
-				>
+					{#each notes as note (note.id)}
+						<NotesCard
+							{note}
+							isEditing={editingNoteId === note.id}
+							form={editingNoteId === note.id ? editNoteForm : undefined}
+							enhance={editingNoteId === note.id ? editNoteEnhance : undefined}
+							disabled={isUpdatingNote}
+							onEdit={() => startEditingNote(note)}
+							onCancel={cancelEditingNote}
+							onDelete={() => deleteNote(note.id)}
+						/>
+					{/each}
+				</Tabs.Content>
 			</Tabs.Root>
 		{:else}
 			<p class="text-muted-foreground text-center">
