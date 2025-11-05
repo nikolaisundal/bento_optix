@@ -109,7 +109,7 @@
 	});
 
 	const { form: createNoteFormData, enhance: createNoteEnhance } = createNoteForm;
-
+	const createNoteErrors = createNoteForm.errors;
 	// editNoteForm is already correct, just add the missing const destructuring
 
 	// One form for editing notes (shared by all note cards)
@@ -178,9 +178,7 @@
 			isLoadingNotes = false;
 		}
 	}
-	$effect(() => {
-		console.log('noteText:', $createNoteFormData.noteText);
-	});
+
 	// Create new note
 	async function createNote() {
 		if (!selectedPatient) return;
@@ -243,6 +241,7 @@
 	function cancelEditingNote() {
 		editingNoteId = null;
 		$editNoteFormData.noteText = '';
+		newNoteActive = false;
 	}
 
 	// Delete note
@@ -527,9 +526,9 @@
 
 <!-- search -->
 <div
-	class="mx-auto flex min-h-screen w-full max-w-[1920px] flex-col border-black sm:flex-row sm:border-x-2 dark:border-slate-600"
+	class="mx-auto flex min-h-screen w-full max-w-[1920px] flex-col border-black lg:flex-row lg:border-x-2 dark:border-slate-600"
 >
-	<div class="flex w-full flex-col border-black sm:w-3/5 sm:border-r-2 dark:border-slate-600">
+	<div class="flex w-full flex-col border-black lg:w-3/5 lg:border-r-2 dark:border-slate-600">
 		<div class="space-y-4 p-6">
 			<div class="flex items-center justify-between">
 				<h2 class="text-2xl font-bold">Search Patients</h2>
@@ -669,7 +668,9 @@
 	</div>
 	<!-- patient info -->
 
-	<div class="w-full border-t-2 border-black p-6 sm:w-2/5 sm:border-none dark:border-slate-600">
+	<div
+		class="sm:lg-6 w-full border-t-2 border-black p-6 pb-96 lg:w-2/5 lg:border-none dark:border-slate-600"
+	>
 		{#if isLoadingPatient}
 			<div class="flex items-center justify-center py-12">
 				<p class="text-muted-foreground">Loading patient...</p>
@@ -742,14 +743,14 @@
 						/>
 					{/if}</Tabs.Content
 				>
-				<Tabs.Content value="notes">
+				<Tabs.Content value="notes" class="space-y-2">
 					{#if newNoteActive}<Card.Root class="w-full">
-							<Card.Content class="pt-6">
+							<Card.Content>
 								<form class="space-y-4" use:createNoteEnhance>
 									<Form.Field form={createNoteForm} name="noteText">
 										<Form.Control>
 											{#snippet children({ props })}
-												<div class="flex items-start gap-4">
+												<div class="flex flex-col gap-4 md:flex-row lg:flex-col 2xl:flex-row">
 													<div class="text-muted-foreground min-w-[80px] text-sm">Today</div>
 													<Textarea
 														{...props}
@@ -758,7 +759,7 @@
 														class="flex-1 resize-none"
 														rows={4}
 													/>
-													<div class="flex flex-col gap-2">
+													<div class="flex flex-row justify-between gap-2">
 														<Button
 															type="submit"
 															size="icon"
@@ -782,7 +783,9 @@
 												</div>
 											{/snippet}
 										</Form.Control>
-										<Form.FieldErrors />
+										{#if $createNoteErrors.noteText}
+											<Form.FieldErrors />
+										{/if}
 									</Form.Field>
 								</form>
 							</Card.Content>

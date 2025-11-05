@@ -39,6 +39,7 @@
 	}: Props = $props();
 
 	const editNoteFormData = $derived(form ? form.form : undefined);
+	const editNoteErrors = $derived(form ? form.errors : undefined);
 
 	function formatDate(isoDate: string): string {
 		const date = new Date(isoDate);
@@ -47,14 +48,14 @@
 </script>
 
 <Card.Root class="w-full">
-	<Card.Content class="pt-6">
+	<Card.Content class="">
 		{#if isEditing && form}
 			<!-- Edit mode with superform -->
-			<form class="space-y-4" use:enhance>
+			<form use:enhance>
 				<Form.Field {form} name="noteText">
 					<Form.Control>
 						{#snippet children({ props })}
-							<div class="flex items-start gap-4">
+							<div class="flex flex-col gap-4 md:flex-row lg:flex-col 2xl:flex-row">
 								<div class="text-muted-foreground min-w-[80px] text-sm">
 									{formatDate(note.note_date)}
 								</div>
@@ -65,7 +66,7 @@
 									class="flex-1 resize-none"
 									rows={4}
 								/>
-								<div class="flex flex-col gap-2">
+								<div class="flex flex-row justify-between gap-2">
 									<Button type="submit" size="icon" variant="ghost" {disabled} title="Save">
 										<SaveIcon class="h-4 w-4 text-green-600 dark:text-green-400" />
 									</Button>
@@ -83,17 +84,19 @@
 							</div>
 						{/snippet}
 					</Form.Control>
-					<Form.FieldErrors />
+					{#if $editNoteErrors?.noteText}
+						<Form.FieldErrors />
+					{/if}
 				</Form.Field>
 			</form>
 		{:else}
 			<!-- View mode -->
-			<div class="flex items-start gap-4">
+			<div class="flex flex-col gap-4 md:flex-row lg:flex-col 2xl:flex-row">
 				<div class="text-muted-foreground min-w-[80px] text-sm">
 					{formatDate(note.note_date)}
 				</div>
 				<Textarea value={note.note_text} disabled class="flex-1 resize-none" rows={4} />
-				<div class="flex flex-col gap-2">
+				<div class="flex flex-row justify-between gap-2">
 					<Button size="icon" variant="ghost" onclick={onEdit} title="Edit">
 						<PencilIcon class="h-4 w-4 text-blue-600 dark:text-blue-400" />
 					</Button>

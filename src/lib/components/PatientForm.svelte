@@ -56,67 +56,37 @@
 				<Form.FieldErrors />
 			</Form.Field>
 		</div>
+		<div class="grid grid-cols-2 gap-4">
+			<Form.Field {form} name="dateOfBirth">
+				<Form.Control>
+					{#snippet children({ props })}
+						<Form.Label>Date of Birth *</Form.Label>
+						<Input
+							{...props}
+							type="date"
+							bind:value={$formData.dateOfBirth}
+							disabled={isSubmitting || disabled}
+						/>
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors />
+			</Form.Field>
 
-		<Form.Field {form} name="dateOfBirth">
-			<Form.Control>
-				{#snippet children({ props })}
-					<Form.Label>Date of Birth *</Form.Label>
-					<Input
-						{...props}
-						type="date"
-						bind:value={$formData.dateOfBirth}
-						disabled={isSubmitting || disabled}
-					/>
-				{/snippet}
-			</Form.Control>
-			<Form.FieldErrors />
-		</Form.Field>
-	</div>
-
-	<!-- Optional Fields Section -->
-	<div class="space-y-4">
-		<h3 class="text-sm font-medium">Additional Information</h3>
-
-		<Form.Field {form} name="nationalId">
-			<Form.Control>
-				{#snippet children({ props })}
-					<Form.Label>National ID</Form.Label>
-					<Input
-						{...props}
-						bind:value={$formData.nationalId}
-						placeholder="Enter national ID"
-						disabled={isSubmitting || disabled}
-					/>
-				{/snippet}
-			</Form.Control>
-			<Form.FieldErrors />
-		</Form.Field>
-
-		<Form.Field {form} name="gender">
-			<Form.Control>
-				{#snippet children({ props })}
-					<Form.Label>Gender</Form.Label>
-					<Select.Root
-						type="single"
-						bind:value={$formData.gender}
-						name={props.name}
-						disabled={isSubmitting || disabled}
-					>
-						<Select.Trigger {...props}>
-							{$formData.gender
-								? $formData.gender.charAt(0).toUpperCase() + $formData.gender.slice(1)
-								: 'Select gender'}
-						</Select.Trigger>
-						<Select.Content>
-							<Select.Item value="male" label="Male" />
-							<Select.Item value="female" label="Female" />
-							<Select.Item value="other" label="Other" />
-						</Select.Content>
-					</Select.Root>
-				{/snippet}
-			</Form.Control>
-			<Form.FieldErrors />
-		</Form.Field>
+			<Form.Field {form} name="nationalId">
+				<Form.Control>
+					{#snippet children({ props })}
+						<Form.Label>National ID</Form.Label>
+						<Input
+							{...props}
+							bind:value={$formData.nationalId}
+							placeholder="Enter national ID"
+							disabled={isSubmitting || disabled}
+						/>
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors />
+			</Form.Field>
+		</div>
 
 		<div class="grid grid-cols-2 gap-4">
 			<Form.Field {form} name="phoneNumber">
@@ -167,20 +137,48 @@
 			<Form.FieldErrors />
 		</Form.Field>
 
-		<Form.Field {form} name="postalCode">
-			<Form.Control>
-				{#snippet children({ props })}
-					<Form.Label>Postal Code</Form.Label>
-					<Input
-						{...props}
-						bind:value={$formData.postalCode}
-						placeholder="Enter postal code"
-						disabled={isSubmitting || disabled}
-					/>
-				{/snippet}
-			</Form.Control>
-			<Form.FieldErrors />
-		</Form.Field>
+		<div class="grid grid-cols-2 gap-4">
+			<Form.Field {form} name="postalCode">
+				<Form.Control>
+					{#snippet children({ props })}
+						<Form.Label>Postal Code</Form.Label>
+						<Input
+							{...props}
+							bind:value={$formData.postalCode}
+							placeholder="Enter postal code"
+							disabled={isSubmitting || disabled}
+						/>
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors />
+			</Form.Field>
+
+			<Form.Field {form} name="gender">
+				<Form.Control>
+					{#snippet children({ props })}
+						<Form.Label>Gender</Form.Label>
+						<Select.Root
+							type="single"
+							bind:value={$formData.gender}
+							name={props.name}
+							disabled={isSubmitting || disabled}
+						>
+							<Select.Trigger {...props} class="w-full">
+								{$formData.gender
+									? $formData.gender.charAt(0).toUpperCase() + $formData.gender.slice(1)
+									: 'Select gender'}
+							</Select.Trigger>
+							<Select.Content>
+								<Select.Item value="male" label="Male" />
+								<Select.Item value="female" label="Female" />
+								<Select.Item value="other" label="Other" />
+							</Select.Content>
+						</Select.Root>
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors />
+			</Form.Field>
+		</div>
 
 		<div class="grid grid-cols-2 gap-4">
 			<Form.Field {form} name="occupation">
